@@ -30,12 +30,31 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
 
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
+
+# local database / temp files
+data/*.db
+data/*.db-*
+data/*.sqlite
+data/*.sqlite-*
+*.sqlite-wal
+*.sqlite-shm
+*.db-wal
+*.db-shm
+
+# local logs
+*.log
+dev.log
+dev.err.log

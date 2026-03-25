@@ -1,26 +1,106 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f4ede7;
+  --foreground: #1f1a17;
+  --panel: #fffaf6;
+  --line: #e6d6cb;
+  --muted: #705f55;
+  --accent: #c66a45;
+  --accent-ink: #fef9f4;
+  --success: #2d7d57;
+  --warning: #a66b16;
+  --danger: #b54747;
+  --shadow: 0 24px 70px -36px rgba(67, 39, 24, 0.35);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-noto-sans-sc);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--line);
+}
+
+html {
+  background:
+    radial-gradient(circle at top left, rgba(198, 106, 69, 0.18), transparent 28%),
+    radial-gradient(circle at right 15%, rgba(162, 101, 62, 0.12), transparent 24%),
+    linear-gradient(180deg, #f8f2ec 0%, #f4ede7 100%);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-noto-sans-sc), sans-serif;
+}
+
+::selection {
+  background: rgba(198, 106, 69, 0.18);
+}
+
+@layer base {
+  input,
+  select,
+  textarea {
+    @apply w-full rounded-2xl border bg-white/90 px-4 py-3 text-sm outline-none transition;
+    border-color: var(--line);
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    @apply ring-2;
+    border-color: color-mix(in srgb, var(--accent) 70%, white);
+    ring-color: color-mix(in srgb, var(--accent) 24%, white);
+  }
+
+  button {
+    @apply transition;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-[28px] border bg-[color:var(--panel)] shadow-[var(--shadow)];
+  }
+
+  .panel-soft {
+    @apply rounded-[24px] border bg-white/70;
+  }
+
+  .button-primary {
+    @apply inline-flex items-center justify-center rounded-full px-4 py-2.5 text-sm font-medium;
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  .button-primary:hover {
+    filter: brightness(0.96);
+  }
+
+  .button-secondary {
+    @apply inline-flex items-center justify-center rounded-full border px-4 py-2.5 text-sm font-medium;
+    background: rgba(255, 255, 255, 0.82);
+  }
+
+  .tiny-label {
+    @apply text-[11px] font-medium uppercase tracking-[0.18em];
+    color: var(--muted);
+  }
+
+  .field-label {
+    @apply mb-2 block text-sm font-medium;
+  }
+
+  .muted-text {
+    color: var(--muted);
+  }
+
+  .grid-panels {
+    @apply grid gap-4 xl:gap-5;
+  }
 }
