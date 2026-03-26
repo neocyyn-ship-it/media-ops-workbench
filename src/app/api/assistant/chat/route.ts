@@ -26,7 +26,7 @@ function summarizeTasks() {
   return listTasks()
     .slice(0, 8)
     .map((task) => {
-      const dueText = task.dueAt ? `截止 ${task.dueAt}` : "未设截止时间";
+      const dueText = task.dueAt ? `截止 ${task.dueAt}` : "未设置截止时间";
       return `- ${task.title}｜${TASK_TYPE_LABELS[task.type]}｜${TASK_PRIORITY_LABELS[task.priority]}｜${TASK_STATUS_LABELS[task.status]}｜${dueText}`;
     })
     .join("\n");
@@ -74,7 +74,8 @@ function buildSystemPrompt() {
   return `
 你是“个人新媒体运营工作台”里的 AI 运营助理，服务对象是服装类小红书运营。
 请始终使用简体中文，语气专业、利落、可执行。
-优先帮用户完成这些事：
+
+优先帮助用户：
 1. 拆解任务、排优先级、补充截止时间建议
 2. 生成直播预告、脚本、标题、卖点、评论区引导
 3. 整理日报、周报、复盘纪要
@@ -82,8 +83,8 @@ function buildSystemPrompt() {
 
 回答要求：
 - 优先给可直接复制执行的内容
-- 如果用户的问题适合列表，就给短列表
-- 不要捏造站内不存在的数据；站内上下文不够时请明确说“基于当前工作台数据推断”
+- 适合列表时就给短列表
+- 不要捏造站内不存在的数据；上下文不足时明确说“基于当前工作台数据推断”
 - 如果用户让你写内容，默认给偏新媒体运营实战风格的版本
 `.trim();
 }
@@ -92,24 +93,53 @@ function buildUserPrompt(message: string) {
   return `
 下面是当前工作台上下文，请在回答时优先参考：
 
-【今日工作台】
+[今日工作台]
 ${buildWorkspaceContext()}
 
-【任务】
+[任务]
 ${summarizeTasks() || "暂无任务。"}
 
-【内容排期】
+[内容排期]
 ${summarizeContentPlans() || "暂无已定档内容。"}
 
-【热点词】
+[热点词]
 ${summarizeHotTopics() || "暂无热点词。"}
 
-【日报草稿】
+[日报草稿]
 ${summarizeReportDraft()}
 
-【用户消息】
+[用户消息]
 ${message}
 `.trim();
+}
+
+function formatAssistantError(error: unknown) {
+  if (error instanceof OpenAI.APIError) {
+    if (error.status === 401) {
+      return {
+        status: 401,
+        error:
+          "OpenAI 鉴权失败。请确认 Vercel 中的 OPENAI_API_KEY 是有效的平台 API Key，并在保存后重新部署。",
+      };
+    }
+
+    if (error.status === 429) {
+      return {
+        status: 429,
+        error: "OpenAI 调用达到频率或额度限制，请稍后重试。",
+      };
+    }
+
+    return {
+      status: error.status ?? 500,
+      error: "AI 助理调用失败，请稍后再试。",
+    };
+  }
+
+  return {
+    status: 500,
+    error: "AI 助理调用失败，请稍后再试。",
+  };
 }
 
 export async function POST(request: Request) {
@@ -161,8 +191,7 @@ export async function POST(request: Request) {
       model: DEFAULT_MODEL,
     });
   } catch (error) {
-    const messageText =
-      error instanceof Error ? error.message : "AI 助理调用失败，请稍后再试。";
-    return NextResponse.json({ error: messageText }, { status: 500 });
+    const formatted = formatAssistantError(error);
+    return NextResponse.json({ error: formatted.error }, { status: formatted.status });
   }
 }
