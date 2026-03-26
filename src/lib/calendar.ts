@@ -1,6 +1,7 @@
-import { addDays, format, getDay, parseISO, subDays } from "date-fns";
+import { addDays, format, getDay, subDays } from "date-fns";
 import { zhCN } from "date-fns/locale";
 
+import { getAppDateFromKey } from "@/lib/app-time";
 import {
   CALENDAR_LABEL_DESCRIPTIONS,
   CALENDAR_LABEL_LABELS,
@@ -147,7 +148,7 @@ export function buildHolidayWarmupMap(holidays: HolidayMarker[]) {
   const map = new Map<string, WarmupMarker[]>();
 
   holidays.forEach((holiday) => {
-    const holidayDate = parseISO(`${holiday.dateKey}T00:00:00.000Z`);
+    const holidayDate = getAppDateFromKey(holiday.dateKey);
 
     [3, 2, 1].forEach((offset) => {
       const dateKey = toDateKey(subDays(holidayDate, offset));

@@ -8,6 +8,7 @@ import {
   endOfMonth,
   endOfWeek,
   format,
+  getDaysInMonth,
   getHours,
   getMinutes,
   isSameDay,
@@ -48,6 +49,7 @@ import {
   WEEKDAY_LABELS,
   type WarmupMarker,
 } from "@/lib/calendar";
+import { getAppToday } from "@/lib/app-time";
 import { fetchJson } from "@/lib/client-fetch";
 import { cn, formatDateTime, toDateKey, toDatetimeLocalValue } from "@/lib/utils";
 import {
@@ -109,6 +111,15 @@ function buildDroppedPublishAt(plan: ContentPlanRecord, targetDate: Date) {
   const hour = sourceDate ? getHours(sourceDate) : 10;
   const minute = sourceDate ? getMinutes(sourceDate) : 0;
   return setMinutes(setHours(base, hour), minute).toISOString();
+}
+
+function formatMonthPerspective(date: Date) {
+  const nextMonthStart = startOfMonth(addMonths(date, 1));
+  return `当前月：${formatPlannerPeriod(date)}，共 ${getDaysInMonth(date)} 天；${format(
+    nextMonthStart,
+    "M月d日 EEEE",
+    { locale: zhCN },
+  )}。`;
 }
 
 function DragPlanChip({
@@ -553,7 +564,7 @@ function DayCalendar({
 }
 
 export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPlanRecord[] }) {
-  const today = useMemo(() => startOfDay(new Date()), []);
+  const today = useMemo(() => getAppToday(), []);
   const [plans, setPlans] = useState(initialPlans);
   const [form, setForm] = useState(initialForm);
   const [topic, setTopic] = useState("面试穿搭直播预告");
@@ -834,6 +845,9 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
                 {selectedHoliday ? ` · ${selectedHoliday.name}` : ""}
                 {!selectedHoliday && selectedWarmup ? ` · ${selectedWarmup.label}` : ""}
               </div>
+              {view === "month" ? (
+                <div className="mt-1 text-sm muted-text">{formatMonthPerspective(visibleDate)}</div>
+              ) : null}
             </div>
           </div>
         </div>

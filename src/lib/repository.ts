@@ -1,17 +1,13 @@
 import { randomUUID } from "node:crypto";
 
 import {
-  endOfDay,
-  endOfWeek,
   isWithinInterval,
   parseISO,
-  startOfDay,
-  startOfWeek,
 } from "date-fns";
 
+import { getAppDateFromKey, getAppDateKey, getAppDayInterval, getAppWeekInterval } from "@/lib/app-time";
 import { getDb } from "@/lib/database";
 import { PRIORITY_RANK } from "@/lib/options";
-import { toDateKey } from "@/lib/utils";
 import type {
   CompetitorRecord,
   ContentPlanRecord,
@@ -343,13 +339,14 @@ export function updateTask(
 }
 
 export function getWorkspaceDay(date = new Date()) {
-  const dateKey = toDateKey(date);
+  const dateKey = getAppDateKey(date);
   let row = getDb()
     .prepare(`${workspaceBaseSelect} WHERE date_key = ?`)
     .get(dateKey) as Row | undefined;
 
   if (!row) {
     const now = new Date().toISOString();
+    const { start } = getAppDayInterval(date);
     getDb()
       .prepare(`
         INSERT INTO workspace_days (
@@ -362,7 +359,7 @@ export function getWorkspaceDay(date = new Date()) {
       `)
       .run({
         date_key: dateKey,
-        date: startOfDay(date).toISOString(),
+        date: start.toISOString(),
         progress_status: "ON_TRACK",
         morning_focus: null,
         review_text: null,
@@ -388,7 +385,7 @@ export function saveWorkspaceDay(
     tomorrowPlan: string | null;
   }>,
 ) {
-  const existing = getWorkspaceDay(parseISO(`${dateKey}T00:00:00.000Z`));
+  const existing = getWorkspaceDay(getAppDateFromKey(dateKey));
   const values = {
     progress_status: patch.progressStatus ?? existing.progressStatus,
     morning_focus: patch.morningFocus ?? existing.morningFocus,
@@ -411,7 +408,7 @@ export function saveWorkspaceDay(
     `)
     .run(values);
 
-  return getWorkspaceDay(parseISO(`${dateKey}T00:00:00.000Z`));
+  return getWorkspaceDay(getAppDateFromKey(dateKey));
 }
 
 export function listContentPlans() {
@@ -699,13 +696,14 @@ export function saveReportDraft(input: {
 
 export function getDashboardSnapshot(): DashboardSnapshot {
   const tasks = listTasks();
+  const todayInterval = getAppDayInterval();
   const todayTasks = tasks.filter(
     (task) =>
       task.isTodayFocus ||
       (task.dueAt
         ? isWithinInterval(parseISO(task.dueAt), {
-            start: startOfDay(new Date()),
-            end: endOfDay(new Date()),
+            start: todayInterval.start,
+            end: todayInterval.end,
           })
         : false),
   );
@@ -741,8 +739,9 @@ export function getDashboardSnapshot(): DashboardSnapshot {
 
 export function isTaskInCurrentWeek(task: TaskRecord) {
   if (!task.dueAt) return false;
+  const weekInterval = getAppWeekInterval();
   return isWithinInterval(parseISO(task.dueAt), {
-    start: startOfWeek(new Date(), { weekStartsOn: 1 }),
-    end: endOfWeek(new Date(), { weekStartsOn: 1 }),
+    start: weekInterval.start,
+    end: weekInterval.end,
   });
 }

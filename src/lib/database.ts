@@ -9,9 +9,10 @@ import {
   addWeeks,
   setHours,
   setMinutes,
-  startOfDay,
   subDays,
 } from "date-fns";
+
+import { getAppDateKey, getAppDayInterval, getAppToday } from "@/lib/app-time";
 
 function resolveDatabasePath() {
   const configured = process.env.MEDIA_OPS_DB_PATH?.trim();
@@ -155,11 +156,12 @@ function seedDatabase(db: Database.Database) {
   if (taskCount.count > 0) return;
 
   const now = new Date();
-  const today = startOfDay(now);
+  const today = getAppToday();
   const tomorrow = addDays(today, 1);
   const fridayLike = addDays(today, 3);
   const nextWeek = addWeeks(today, 1);
   const stamp = now.toISOString();
+  const todayInterval = getAppDayInterval(today);
 
   const insertTask = db.prepare(`
     INSERT INTO tasks (
@@ -223,8 +225,8 @@ function seedDatabase(db: Database.Database) {
 
   const transaction = db.transaction(() => {
     insertWorkspace.run({
-      date_key: today.toISOString().slice(0, 10),
-      date: today.toISOString(),
+      date_key: getAppDateKey(today),
+      date: todayInterval.start.toISOString(),
       progress_status: "ON_TRACK",
       morning_focus: "先把直播预告脚本定下来，再把今天的对货和摄影跟进压实。",
       review_text:
