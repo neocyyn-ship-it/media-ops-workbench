@@ -378,11 +378,13 @@ export function AssistantDock() {
                 <div className="text-xs font-medium text-slate-500">口述也可以，先说重点我来整理</div>
                 <div className="mt-2">
                   <VoiceInput
-                    onTranscript={(text) =>
-                      setInput((current) => `${current}${current ? "\n" : ""}${text}`)
-                    }
+                    onTranscript={(text) => {
+                      setInput(text);
+                      void sendMessage(text);
+                    }}
                   />
                 </div>
+                <div className="mt-1 text-[11px] text-slate-400">识别完成后会自动发送给 AI</div>
               </div>
             </div>
 

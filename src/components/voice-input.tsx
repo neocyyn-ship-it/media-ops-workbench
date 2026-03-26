@@ -12,6 +12,7 @@ declare global {
 
 interface SpeechRecognitionEventLike {
   results: SpeechRecognitionResultList;
+  resultIndex?: number;
 }
 
 interface SpeechRecognitionLike {
@@ -52,17 +53,30 @@ export function VoiceInput({
     const recognition = new Recognition();
     recognition.lang = "zh-CN";
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.onresult = (event) => {
-      const text = Array.from(event.results)
+      const results = Array.from(event.results);
+      const finalText = results
+        .filter((result) => result.isFinal)
         .map((result) => result[0]?.transcript ?? "")
         .join("")
         .trim();
-      if (text) {
-        transcriptRef.current = text;
-        onTranscript(text);
+      const interimText = results
+        .filter((result) => !result.isFinal)
+        .map((result) => result[0]?.transcript ?? "")
+        .join("")
+        .trim();
+
+      if (interimText) {
+        setStatus("listening");
+        setStatusText(`正在识别：${interimText.length > 16 ? `${interimText.slice(0, 16)}...` : interimText}`);
+      }
+
+      if (finalText) {
+        transcriptRef.current = finalText;
+        onTranscript(finalText);
         setStatus("success");
-        setStatusText(`已识别：${text.length > 18 ? `${text.slice(0, 18)}...` : text}`);
+        setStatusText(`已识别：${finalText.length > 18 ? `${finalText.slice(0, 18)}...` : finalText}`);
       }
     };
     recognition.onerror = () => {
@@ -112,9 +126,13 @@ export function VoiceInput({
       <button
         type="button"
         onClick={toggle}
-        className="button-secondary gap-2"
+        className={[
+          "button-secondary gap-2",
+          isListening ? "border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent)]" : "",
+        ].join(" ")}
         title="浏览器语音输入"
       >
+        {isListening ? <span className="h-2.5 w-2.5 rounded-full bg-[color:var(--accent)] animate-pulse" /> : null}
         {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
         {isListening ? "结束录音" : "语音输入"}
       </button>
