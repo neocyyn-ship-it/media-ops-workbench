@@ -34,6 +34,21 @@ function at(base: Date, hour: number, minute = 0) {
   return setMinutes(setHours(base, hour), minute).toISOString();
 }
 
+function ensureColumn(
+  db: Database.Database,
+  tableName: string,
+  columnName: string,
+  definition: string,
+) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
+    name: string;
+  }>;
+  if (columns.some((column) => column.name === columnName)) {
+    return;
+  }
+  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+}
+
 function initSchema(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS tasks (
@@ -73,6 +88,7 @@ function initSchema(db: Database.Database) {
       script TEXT NOT NULL,
       publish_at TEXT,
       status TEXT NOT NULL,
+      calendar_label TEXT,
       data_note TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -128,6 +144,8 @@ function initSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_content_publish_at ON content_plans(publish_at);
     CREATE INDEX IF NOT EXISTS idx_hot_topics_happened_at ON hot_topics(happened_at);
   `);
+
+  ensureColumn(db, "content_plans", "calendar_label", "TEXT");
 }
 
 function seedDatabase(db: Database.Database) {
@@ -164,10 +182,10 @@ function seedDatabase(db: Database.Database) {
   const insertContent = db.prepare(`
     INSERT INTO content_plans (
       id, title, content_type, audience, scenario, product, script,
-      publish_at, status, data_note, created_at, updated_at
+      publish_at, status, calendar_label, data_note, created_at, updated_at
     ) VALUES (
       @id, @title, @content_type, @audience, @scenario, @product, @script,
-      @publish_at, @status, @data_note, @created_at, @updated_at
+      @publish_at, @status, @calendar_label, @data_note, @created_at, @updated_at
     )
   `);
   const insertInspiration = db.prepare(`
@@ -316,6 +334,7 @@ function seedDatabase(db: Database.Database) {
         script: "开头先抛问题：面试穿什么不出错？中段给 3 套搭配，再提醒直播间讲细节和预算。",
         publish_at: at(today, 19, 30),
         status: "SCRIPTING",
+        calendar_label: "CAMPAIGN",
         data_note: "目标收藏率 > 6%，评论引导“想看哪套”。",
       },
       {
@@ -327,6 +346,7 @@ function seedDatabase(db: Database.Database) {
         script: "前 3 秒先展示前后对比，强调腰线和鞋裤同色，再给版型建议。",
         publish_at: at(addDays(today, 1), 12, 15),
         status: "SHOOTING",
+        calendar_label: "PRODUCTION",
         data_note: "补拍全身正侧面，观察完播和点赞比。",
       },
       {
@@ -338,6 +358,7 @@ function seedDatabase(db: Database.Database) {
         script: "封面强调“干净不老气”，正文 6 张图拆面料、配色、鞋包建议。",
         publish_at: at(addDays(today, 2), 9, 0),
         status: "EDITING",
+        calendar_label: "PRODUCTION",
         data_note: "看收藏和私信尺码咨询。",
       },
       {
@@ -349,6 +370,7 @@ function seedDatabase(db: Database.Database) {
         script: "按“省心搭配公式”讲 5 件基础款，每件都要落到场景和身材问题。",
         publish_at: at(addDays(today, 3), 20, 0),
         status: "IDEA",
+        calendar_label: "IDEA_POOL",
         data_note: "待确认货盘和库存。",
       },
       {
@@ -360,6 +382,7 @@ function seedDatabase(db: Database.Database) {
         script: "先讲雷区，再给 3 个版型筛选标准，结尾引导评论身材困扰。",
         publish_at: at(addDays(today, 5), 18, 30),
         status: "SCHEDULED",
+        calendar_label: "PUBLISH",
         data_note: "作为周末蓄水内容，关注评论区互动深度。",
       },
     ];

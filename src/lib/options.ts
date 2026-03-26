@@ -1,4 +1,5 @@
 import type {
+  CalendarLabel,
   ContentStatus,
   ContentType,
   InspirationType,
@@ -11,6 +12,7 @@ import type {
   WorkspaceProgress,
 } from "@/lib/types";
 import {
+  CALENDAR_LABELS,
   CONTENT_STATUSES,
   CONTENT_TYPES,
   INSPIRATION_TYPES,
@@ -82,6 +84,24 @@ export const CONTENT_STATUS_LABELS: Record<ContentStatus, string> = {
   REVIEWED: "已复盘",
 };
 
+export const CALENDAR_LABEL_LABELS: Record<CalendarLabel, string> = {
+  CAMPAIGN: "直播预热",
+  PRODUCTION: "拍摄制作",
+  PUBLISH: "正式发布",
+  REVIEW: "数据复盘",
+  IDEA_POOL: "选题储备",
+  FOLLOW_UP: "协同跟进",
+};
+
+export const CALENDAR_LABEL_DESCRIPTIONS: Record<CalendarLabel, string> = {
+  CAMPAIGN: "预告、直播、活动节点",
+  PRODUCTION: "脚本、拍摄、剪辑执行中",
+  PUBLISH: "排期已定，准备发布或已发布",
+  REVIEW: "复盘、数据回填和二次优化",
+  IDEA_POOL: "灵感、待排期选题和预备坑位",
+  FOLLOW_UP: "等人协作、对货、补位提醒",
+};
+
 export const INSPIRATION_TYPE_LABELS: Record<InspirationType, string> = {
   COVER: "封面",
   TITLE: "标题",
@@ -113,27 +133,16 @@ function buildOptions<T extends string>(
 }
 
 export const TASK_TYPE_OPTIONS = buildOptions(TASK_TYPES, TASK_TYPE_LABELS);
-export const TASK_PRIORITY_OPTIONS = buildOptions(
-  TASK_PRIORITIES,
-  TASK_PRIORITY_LABELS,
-);
+export const TASK_PRIORITY_OPTIONS = buildOptions(TASK_PRIORITIES, TASK_PRIORITY_LABELS);
 export const TASK_STATUS_OPTIONS = buildOptions(TASK_STATUSES, TASK_STATUS_LABELS);
-export const TASK_CADENCE_OPTIONS = buildOptions(
-  TASK_CADENCES,
-  TASK_CADENCE_LABELS,
-);
+export const TASK_CADENCE_OPTIONS = buildOptions(TASK_CADENCES, TASK_CADENCE_LABELS);
 export const WORKSPACE_PROGRESS_OPTIONS = buildOptions(
   WORKSPACE_PROGRESS,
   WORKSPACE_PROGRESS_LABELS,
 );
-export const CONTENT_TYPE_OPTIONS = buildOptions(
-  CONTENT_TYPES,
-  CONTENT_TYPE_LABELS,
-);
-export const CONTENT_STATUS_OPTIONS = buildOptions(
-  CONTENT_STATUSES,
-  CONTENT_STATUS_LABELS,
-);
+export const CONTENT_TYPE_OPTIONS = buildOptions(CONTENT_TYPES, CONTENT_TYPE_LABELS);
+export const CONTENT_STATUS_OPTIONS = buildOptions(CONTENT_STATUSES, CONTENT_STATUS_LABELS);
+export const CALENDAR_LABEL_OPTIONS = buildOptions(CALENDAR_LABELS, CALENDAR_LABEL_LABELS);
 export const INSPIRATION_TYPE_OPTIONS = buildOptions(
   INSPIRATION_TYPES,
   INSPIRATION_TYPE_LABELS,

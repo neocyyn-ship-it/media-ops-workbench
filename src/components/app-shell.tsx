@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Download, Sparkles } from "lucide-react";
 
+import { AssistantDock } from "@/components/assistant-dock";
 import { NAV_ITEMS } from "@/lib/options";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +103,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <main className="pb-6">{children}</main>
       </div>
+
+      <AssistantDock />
     </div>
   );
 }

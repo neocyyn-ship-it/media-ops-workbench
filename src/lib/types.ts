@@ -40,6 +40,14 @@ export const CONTENT_STATUSES = [
   "PUBLISHED",
   "REVIEWED",
 ] as const;
+export const CALENDAR_LABELS = [
+  "CAMPAIGN",
+  "PRODUCTION",
+  "PUBLISH",
+  "REVIEW",
+  "IDEA_POOL",
+  "FOLLOW_UP",
+] as const;
 export const INSPIRATION_TYPES = [
   "COVER",
   "TITLE",
@@ -63,12 +71,15 @@ export type TaskCadence = (typeof TASK_CADENCES)[number];
 export type WorkspaceProgress = (typeof WORKSPACE_PROGRESS)[number];
 export type ContentType = (typeof CONTENT_TYPES)[number];
 export type ContentStatus = (typeof CONTENT_STATUSES)[number];
+export type CalendarLabel = (typeof CALENDAR_LABELS)[number];
 export type InspirationType = (typeof INSPIRATION_TYPES)[number];
 export type Platform = (typeof PLATFORMS)[number];
 export type TopicType = (typeof TOPIC_TYPES)[number];
 
 export type TaskView = "today" | "week" | "all";
 export type TopicWindow = "today" | "week" | "all";
+export type PlannerView = "month" | "week" | "day";
+export type HolidayMarkerType = "holiday" | "weekend";
 
 export interface TaskRecord {
   id: string;
@@ -107,6 +118,7 @@ export interface ContentPlanRecord {
   script: string;
   publishAt: string | null;
   status: ContentStatus;
+  calendarLabel: CalendarLabel | null;
   dataNote: string | null;
   createdAt: string;
   updatedAt: string;
@@ -195,4 +207,10 @@ export interface ContentSuggestion {
   hook: string;
   sellingPoints: string[];
   cta: string;
+}
+
+export interface HolidayMarker {
+  dateKey: string;
+  name: string;
+  type: HolidayMarkerType;
 }

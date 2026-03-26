@@ -72,6 +72,7 @@ const contentBaseSelect = `
     script,
     publish_at AS publishAt,
     status,
+    calendar_label AS calendarLabel,
     data_note AS dataNote,
     created_at AS createdAt,
     updated_at AS updatedAt
@@ -174,6 +175,7 @@ function mapContentPlan(row: Row): ContentPlanRecord {
     script: String(row.script),
     publishAt: row.publishAt ? String(row.publishAt) : null,
     status: row.status as ContentPlanRecord["status"],
+    calendarLabel: row.calendarLabel ? (String(row.calendarLabel) as ContentPlanRecord["calendarLabel"]) : null,
     dataNote: row.dataNote ? String(row.dataNote) : null,
     createdAt: String(row.createdAt),
     updatedAt: String(row.updatedAt),
@@ -419,6 +421,13 @@ export function listContentPlans() {
   return rows.map(mapContentPlan);
 }
 
+export function getContentPlanById(id: string) {
+  const row = getDb()
+    .prepare(`${contentBaseSelect} WHERE id = ?`)
+    .get(id) as Row | undefined;
+  return row ? mapContentPlan(row) : null;
+}
+
 export function createContentPlan(input: {
   title: string;
   contentType: ContentPlanRecord["contentType"];
@@ -428,6 +437,7 @@ export function createContentPlan(input: {
   script: string;
   publishAt?: string | null;
   status?: ContentPlanRecord["status"];
+  calendarLabel?: ContentPlanRecord["calendarLabel"];
   dataNote?: string | null;
 }) {
   const now = new Date().toISOString();
@@ -441,6 +451,7 @@ export function createContentPlan(input: {
     script: input.script,
     publish_at: input.publishAt ?? null,
     status: input.status ?? "IDEA",
+    calendar_label: input.calendarLabel ?? null,
     data_note: input.dataNote ?? null,
     created_at: now,
     updated_at: now,
@@ -449,10 +460,10 @@ export function createContentPlan(input: {
     .prepare(`
       INSERT INTO content_plans (
         id, title, content_type, audience, scenario, product, script,
-        publish_at, status, data_note, created_at, updated_at
+        publish_at, status, calendar_label, data_note, created_at, updated_at
       ) VALUES (
         @id, @title, @content_type, @audience, @scenario, @product, @script,
-        @publish_at, @status, @data_note, @created_at, @updated_at
+        @publish_at, @status, @calendar_label, @data_note, @created_at, @updated_at
       )
     `)
     .run(record);
@@ -461,6 +472,55 @@ export function createContentPlan(input: {
     .prepare(`${contentBaseSelect} WHERE id = ?`)
     .get(record.id) as Row;
   return mapContentPlan(row);
+}
+
+export function updateContentPlan(
+  id: string,
+  patch: Partial<{
+    title: string;
+    contentType: ContentPlanRecord["contentType"];
+    audience: string;
+    scenario: string;
+    product: string;
+    script: string;
+    publishAt: string | null;
+    status: ContentPlanRecord["status"];
+    calendarLabel: ContentPlanRecord["calendarLabel"];
+    dataNote: string | null;
+  }>,
+) {
+  const updates: Record<string, string | null> = {};
+  if (patch.title !== undefined) updates.title = patch.title;
+  if (patch.contentType !== undefined) updates.content_type = patch.contentType;
+  if (patch.audience !== undefined) updates.audience = patch.audience;
+  if (patch.scenario !== undefined) updates.scenario = patch.scenario;
+  if (patch.product !== undefined) updates.product = patch.product;
+  if (patch.script !== undefined) updates.script = patch.script;
+  if (patch.publishAt !== undefined) updates.publish_at = patch.publishAt;
+  if (patch.status !== undefined) updates.status = patch.status;
+  if (patch.calendarLabel !== undefined) updates.calendar_label = patch.calendarLabel;
+  if (patch.dataNote !== undefined) updates.data_note = patch.dataNote;
+
+  const fields = Object.keys(updates);
+  if (fields.length === 0) {
+    return getContentPlanById(id);
+  }
+
+  const values = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+    id,
+  };
+
+  const setClause = fields
+    .map((field) => `${field} = @${field}`)
+    .concat("updated_at = @updated_at");
+
+  getDb()
+    .prepare(`UPDATE content_plans SET ${setClause.join(", ")} WHERE id = @id`)
+    .run(values);
+
+  return getContentPlanById(id);
 }
 
 export function listInspirationItems() {

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { createContentPlan, listContentPlans } from "@/lib/repository";
 import { isOneOf } from "@/lib/options";
-import { CONTENT_STATUSES, CONTENT_TYPES } from "@/lib/types";
+import { createContentPlan, listContentPlans } from "@/lib/repository";
+import { CALENDAR_LABELS, CONTENT_STATUSES, CONTENT_TYPES } from "@/lib/types";
 
 export function GET() {
   return NextResponse.json({ plans: listContentPlans() });
@@ -25,6 +25,9 @@ export async function POST(request: Request) {
     script: body.script?.trim() || "待补充",
     publishAt: body.publishAt || null,
     status: isOneOf(body.status, CONTENT_STATUSES) ? body.status : "IDEA",
+    calendarLabel: isOneOf(body.calendarLabel, CALENDAR_LABELS)
+      ? body.calendarLabel
+      : null,
     dataNote: body.dataNote?.trim() || null,
   });
 
