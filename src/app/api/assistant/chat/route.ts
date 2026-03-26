@@ -23,17 +23,6 @@ export const dynamic = "force-dynamic";
 const DEFAULT_MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-5-mini";
 const CUSTOM_BASE_URL = process.env.OPENAI_BASE_URL?.trim() || "";
 
-type ChatCompletionsResponse = {
-  choices?: Array<{
-    message?: {
-      content?: string | Array<{ type?: string; text?: string }>;
-    };
-  }>;
-  error?: {
-    message?: string;
-  };
-};
-
 function summarizeTasks() {
   return listTasks()
     .slice(0, 8)
@@ -126,50 +115,45 @@ ${message}
 }
 
 function normalizeBaseUrl(baseUrl: string) {
-  return baseUrl.replace(/\/+$/, "");
+  const normalized = baseUrl.replace(/\/+$/, "");
+  return /\/v\d+$/i.test(normalized) ? normalized : `${normalized}/v1`;
 }
 
-function buildCompatibleEndpoints(baseUrl: string) {
-  const normalized = normalizeBaseUrl(baseUrl);
-  const endpoints = [`${normalized}/chat/completions`];
+function buildCompatibleModelCandidates() {
+  return [...new Set([DEFAULT_MODEL, "gpt-5-mini", "gpt-4o-mini", "gpt-4.1-mini"])];
+}
 
-  if (!/\/v\d+$/i.test(normalized)) {
-    endpoints.push(`${normalized}/v1/chat/completions`);
+function isModelCompatibilityError(error: { status?: number; message: string }) {
+  if (error.status !== 400 && error.status !== 404) {
+    return false;
   }
 
-  return [...new Set(endpoints)];
-}
-
-function parseCompatibleContent(content: ChatCompletionsResponse["choices"]) {
-  const first = choicesFirstMessageContent(content);
-  if (typeof first === "string") return first.trim();
-  if (Array.isArray(first)) {
-    return first
-      .map((item) => item.text?.trim() || "")
-      .filter(Boolean)
-      .join("\n")
-      .trim();
-  }
-  return "";
-}
-
-function choicesFirstMessageContent(choices: ChatCompletionsResponse["choices"]) {
-  return choices?.[0]?.message?.content;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("model") &&
+    (message.includes("not found") ||
+      message.includes("unsupported") ||
+      message.includes("does not exist") ||
+      message.includes("invalid"))
+  );
 }
 
 async function callCompatibleChatApi(apiKey: string, message: string) {
-  const endpoints = buildCompatibleEndpoints(CUSTOM_BASE_URL);
+  const client = new OpenAI({
+    apiKey,
+    baseURL: normalizeBaseUrl(CUSTOM_BASE_URL),
+    defaultHeaders: {
+      "x-api-key": apiKey,
+      Accept: "application/json",
+    },
+  });
+
   let lastFailure: { status: number; message: string } | null = null;
 
-  for (const endpoint of endpoints) {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: DEFAULT_MODEL,
+  for (const model of buildCompatibleModelCandidates()) {
+    try {
+      const response = await client.chat.completions.create({
+        model,
         temperature: 0.7,
         max_tokens: 900,
         messages: [
@@ -182,41 +166,42 @@ async function callCompatibleChatApi(apiKey: string, message: string) {
             content: buildUserPrompt(message),
           },
         ],
-      }),
-    });
+      });
 
-    const data = (await response.json()) as ChatCompletionsResponse;
-    if (!response.ok) {
-      lastFailure = {
-        status: response.status,
-        message: data.error?.message || "兼容接口调用失败。",
-      };
-
-      if (response.status === 404) {
+      const reply = response.choices?.[0]?.message?.content?.trim();
+      if (!reply) {
+        lastFailure = {
+          status: 502,
+          message: "兼容接口没有返回可读文本。",
+        };
         continue;
       }
 
       return {
-        ok: false,
-        status: response.status,
-        message: data.error?.message || "兼容接口调用失败。",
+        ok: true,
+        status: 200,
+        reply,
+        model,
       };
-    }
+    } catch (error) {
+      if (error instanceof OpenAI.APIError && isModelCompatibilityError(error)) {
+        lastFailure = {
+          status: error.status ?? 400,
+          message: error.message || "当前模型在第三方兼容接口中不可用。",
+        };
+        continue;
+      }
 
-    const reply = parseCompatibleContent(data.choices);
-    if (!reply) {
-      lastFailure = {
-        status: 502,
-        message: "兼容接口没有返回可读文本。",
-      };
-      continue;
-    }
+      if (error instanceof OpenAI.APIError) {
+        return {
+          ok: false,
+          status: error.status ?? 500,
+          message: error.message || "兼容接口调用失败。",
+        };
+      }
 
-    return {
-      ok: true,
-      status: 200,
-      reply,
-    };
+      throw error;
+    }
   }
 
   return {
@@ -287,7 +272,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         reply: result.reply,
-        model: DEFAULT_MODEL,
+        model: result.model,
         baseUrl: CUSTOM_BASE_URL,
       });
     } catch {
