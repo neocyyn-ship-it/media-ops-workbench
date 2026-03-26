@@ -129,6 +129,17 @@ function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/+$/, "");
 }
 
+function buildCompatibleEndpoints(baseUrl: string) {
+  const normalized = normalizeBaseUrl(baseUrl);
+  const endpoints = [`${normalized}/chat/completions`];
+
+  if (!/\/v\d+$/i.test(normalized)) {
+    endpoints.push(`${normalized}/v1/chat/completions`);
+  }
+
+  return [...new Set(endpoints)];
+}
+
 function parseCompatibleContent(content: ChatCompletionsResponse["choices"]) {
   const first = choicesFirstMessageContent(content);
   if (typeof first === "string") return first.trim();
@@ -147,52 +158,71 @@ function choicesFirstMessageContent(choices: ChatCompletionsResponse["choices"])
 }
 
 async function callCompatibleChatApi(apiKey: string, message: string) {
-  const baseUrl = normalizeBaseUrl(CUSTOM_BASE_URL);
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
-      temperature: 0.7,
-      max_tokens: 900,
-      messages: [
-        {
-          role: "system",
-          content: buildSystemPrompt(),
-        },
-        {
-          role: "user",
-          content: buildUserPrompt(message),
-        },
-      ],
-    }),
-  });
+  const endpoints = buildCompatibleEndpoints(CUSTOM_BASE_URL);
+  let lastFailure: { status: number; message: string } | null = null;
 
-  const data = (await response.json()) as ChatCompletionsResponse;
-  if (!response.ok) {
-    return {
-      ok: false,
-      status: response.status,
-      message: data.error?.message || "兼容接口调用失败。",
-    };
-  }
+  for (const endpoint of endpoints) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: DEFAULT_MODEL,
+        temperature: 0.7,
+        max_tokens: 900,
+        messages: [
+          {
+            role: "system",
+            content: buildSystemPrompt(),
+          },
+          {
+            role: "user",
+            content: buildUserPrompt(message),
+          },
+        ],
+      }),
+    });
 
-  const reply = parseCompatibleContent(data.choices);
-  if (!reply) {
+    const data = (await response.json()) as ChatCompletionsResponse;
+    if (!response.ok) {
+      lastFailure = {
+        status: response.status,
+        message: data.error?.message || "兼容接口调用失败。",
+      };
+
+      if (response.status === 404) {
+        continue;
+      }
+
+      return {
+        ok: false,
+        status: response.status,
+        message: data.error?.message || "兼容接口调用失败。",
+      };
+    }
+
+    const reply = parseCompatibleContent(data.choices);
+    if (!reply) {
+      lastFailure = {
+        status: 502,
+        message: "兼容接口没有返回可读文本。",
+      };
+      continue;
+    }
+
     return {
-      ok: false,
-      status: 502,
-      message: "兼容接口没有返回可读文本。",
+      ok: true,
+      status: 200,
+      reply,
     };
   }
 
   return {
-    ok: true,
-    status: 200,
-    reply,
+    ok: false,
+    status: lastFailure?.status ?? 500,
+    message: lastFailure?.message || "兼容接口调用失败。",
   };
 }
 
