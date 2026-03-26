@@ -209,6 +209,19 @@ export interface ContentSuggestion {
   cta: string;
 }
 
+export interface ContentPlanSuggestion {
+  title: string;
+  contentType: ContentType;
+  audience?: string;
+  scenario?: string;
+  product?: string;
+  script?: string;
+  publishAt: string | null;
+  status: ContentStatus;
+  calendarLabel: CalendarLabel | null;
+  dataNote?: string | null;
+}
+
 export interface HolidayMarker {
   dateKey: string;
   name: string;

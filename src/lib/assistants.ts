@@ -1,12 +1,18 @@
-import { addDays, format, setHours, setMinutes, startOfDay } from "date-fns";
+import { addDays, format, startOfDay } from "date-fns";
 
+import { getDefaultCalendarLabel } from "@/lib/calendar";
 import type {
+  CalendarLabel,
+  ContentPlanSuggestion,
   ContentSuggestion,
+  ContentStatus,
+  ContentType,
   GeneratedReport,
   TaskPriority,
   TaskSuggestion,
   TaskType,
 } from "@/lib/types";
+import { buildWorkingDateTime } from "@/lib/work-schedule";
 
 function normalizeText(input: string) {
   return input.replace(/\r/g, "").replace(/[；;]/g, "。").replace(/[，,]/g, "。").trim();
@@ -70,7 +76,7 @@ function extractDueAt(text: string) {
     return null;
   }
 
-  return setMinutes(setHours(base, hour), minute).toISOString();
+  return buildWorkingDateTime(base, { hour, minute, direction: "forward" }).toISOString();
 }
 
 function cleanTaskTitle(segment: string) {
@@ -92,6 +98,88 @@ export function suggestTasksFromText(input: string): TaskSuggestion[] {
       notes: `由快速输入自动拆解：${segment}`,
     };
   });
+}
+
+function isContentPlanningSegment(text: string) {
+  return /(预告|脚本|图文|短视频|视频|笔记|直播|穿搭|种草|选题|发布|上新|封面|标题)/.test(
+    text,
+  );
+}
+
+function inferContentType(text: string): ContentType {
+  if (/图文|笔记/.test(text)) return "CAROUSEL";
+  if (/短视频|口播|视频/.test(text)) return "SHORT_VIDEO";
+  if (/穿搭/.test(text)) return "OUTFIT";
+  if (/种草/.test(text)) return "SEEDING";
+  return "LIVE_TRAILER";
+}
+
+function inferContentStatus(text: string): ContentStatus {
+  if (/复盘|数据/.test(text)) return "REVIEWED";
+  if (/发布|发出|上线|上架/.test(text)) return "SCHEDULED";
+  if (/剪辑|剪片|剪出/.test(text)) return "EDITING";
+  if (/拍摄|补拍/.test(text)) return "SHOOTING";
+  if (/脚本|提纲|文案|标题|封面/.test(text)) return "SCRIPTING";
+  return "IDEA";
+}
+
+function inferAudience(text: string) {
+  if (/面试/.test(text)) return "面试女生";
+  if (/通勤/.test(text)) return "通勤女生";
+  if (/直播/.test(text)) return "直播间新客";
+  return "待补充";
+}
+
+function inferScenario(text: string) {
+  if (/节前|预热|假期前/.test(text)) return "节前预热";
+  if (/节后|回流/.test(text)) return "节后回流";
+  if (/直播/.test(text)) return "直播运营";
+  if (/今天/.test(text)) return "今日执行";
+  if (/明天/.test(text)) return "明日准备";
+  return "待补充";
+}
+
+function cleanContentTitle(segment: string) {
+  const cleaned = segment
+    .replace(/^(今天|今晚|明天|后天|下周|本周|明早|明晚|早上|上午|中午|下午|晚上)/, "")
+    .replace(/^\d{1,2}点(?:\d{1,2}分?)?/, "")
+    .replace(/^(先|再|然后|顺便|需要|安排|准备|做|出|写|补)/, "")
+    .replace(/(一下|一版|一个|一条)$/g, "")
+    .trim();
+
+  return cleaned || segment.trim();
+}
+
+function inferContentDataNote(text: string) {
+  if (/预热/.test(text)) return "关注直播开播前点击率和预约转化";
+  if (/发布/.test(text)) return "关注发布时间和互动峰值";
+  if (/复盘|数据/.test(text)) return "补充停留、点击、成交和评论反馈";
+  return null;
+}
+
+function buildContentSuggestion(segment: string): ContentPlanSuggestion {
+  const contentType = inferContentType(segment);
+  const status = inferContentStatus(segment);
+  const calendarLabel: CalendarLabel = getDefaultCalendarLabel(status, contentType);
+
+  return {
+    title: cleanContentTitle(segment),
+    contentType,
+    audience: inferAudience(segment),
+    scenario: inferScenario(segment),
+    product: "待补充",
+    script: /脚本|文案|标题|封面/.test(segment) ? segment.trim() : "待补充",
+    publishAt: extractDueAt(segment),
+    status,
+    calendarLabel,
+    dataNote: inferContentDataNote(segment),
+  };
+}
+
+export function suggestContentPlansFromText(input: string): ContentPlanSuggestion[] {
+  return splitSegments(input)
+    .filter((segment) => isContentPlanningSegment(segment))
+    .map((segment) => buildContentSuggestion(segment));
 }
 
 function inferTheme(input: string) {

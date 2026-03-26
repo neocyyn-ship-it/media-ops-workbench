@@ -50,6 +50,7 @@ import {
   isWeekend,
   resolveCalendarLabel,
   WEEKDAY_LABELS,
+  WORK_SCHEDULE_TEXT,
   type WarmupMarker,
 } from "@/lib/calendar";
 import { getAppToday } from "@/lib/app-time";
@@ -122,7 +123,7 @@ function formatMonthPerspective(date: Date) {
     nextMonthStart,
     "M月d日 EEEE",
     { locale: zhCN },
-  )}。`;
+  )}。工作节奏：${WORK_SCHEDULE_TEXT}。`;
 }
 
 function DragPlanChip({
@@ -174,7 +175,7 @@ function DateBadges({
       ) : null}
       {!holiday && isWeekend(date) ? (
         <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">
-          周末
+          非工作日
         </span>
       ) : null}
       {warmup ? (
@@ -871,7 +872,7 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
     <div className="space-y-5">
       <PageHeading
         title="内容排期"
-        description="把直播预告、图文、短视频统一收进一个苹果风日历视图里。现在支持颜色标签、节假日提示、周/月/日切换、拖拽改日期，以及节假日前后的直播预热提醒。"
+        description={`把直播预告、图文、短视频统一收进一个苹果风日历视图里。默认按 ${WORK_SCHEDULE_TEXT} 看工作节奏，节假日预热会自动前移到工作日。`}
         action={
           <a className="button-secondary" href="/api/export/workbook">
             导出 Excel
@@ -888,7 +889,7 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
               苹果风排期日历
             </h3>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted-text">
-              颜色标签代表不同工作流，节假日前 3 天会自动进入直播预热期，节后 2 天会标出回流观察期。月视图和周视图支持直接拖拽改日期。
+              颜色标签代表不同工作流。周末默认视为非工作日，节假日前 3 个工作日会自动进入直播预热期，节后 2 个工作日会标出回流观察期。月视图和周视图支持直接拖拽改日期。
             </p>
           </div>
 
@@ -958,8 +959,9 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2 text-xs muted-text">
-          <span className="rounded-full bg-amber-50 px-3 py-1.5 text-amber-700">直播预热期：节前 3 天</span>
-          <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700">节后回流期：节后 2 天</span>
+          <span className="rounded-full bg-amber-50 px-3 py-1.5 text-amber-700">直播预热期：节前 3 个工作日</span>
+          <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700">节后回流期：节后 2 个工作日</span>
+          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-600">周末默认视为非工作日</span>
           <span className="rounded-full bg-white/80 px-3 py-1.5">拖拽内容卡片到日期格子即可改档期</span>
         </div>
 
@@ -1183,6 +1185,9 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
                   setForm((current) => ({ ...current, publishAt: event.target.value }))
                 }
               />
+              <div className="mt-1 text-xs muted-text">
+                默认工作时间按 {WORK_SCHEDULE_TEXT} 理解；如果你要做周末自动发布，也可以手动定具体时间。
+              </div>
             </div>
 
             <div>

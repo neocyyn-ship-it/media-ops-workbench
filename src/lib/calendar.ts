@@ -1,4 +1,4 @@
-import { addDays, format, getDay, subDays } from "date-fns";
+import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 
 import { getAppDateFromKey } from "@/lib/app-time";
@@ -13,7 +13,11 @@ import type {
   ContentStatus,
   HolidayMarker,
 } from "@/lib/types";
-import { toDateKey } from "@/lib/utils";
+import {
+  collectNearbyWorkingDateKeys,
+  isWeekendDate,
+  WORK_SCHEDULE_TEXT,
+} from "@/lib/work-schedule";
 
 export const WEEKDAY_LABELS = [
   "周一",
@@ -24,6 +28,8 @@ export const WEEKDAY_LABELS = [
   "周六",
   "周日",
 ] as const;
+
+export { WORK_SCHEDULE_TEXT };
 
 export type WarmupMarker = {
   dateKey: string;
@@ -79,8 +85,7 @@ export const CALENDAR_LABEL_META: Record<CalendarLabel, CalendarLabelMeta> = {
 };
 
 export function isWeekend(date: Date) {
-  const weekday = getDay(date);
-  return weekday === 0 || weekday === 6;
+  return isWeekendDate(date);
 }
 
 export function getDefaultCalendarLabel(
@@ -146,12 +151,12 @@ export function getStatusSubtitle(status: ContentStatus) {
 
 export function buildHolidayWarmupMap(holidays: HolidayMarker[]) {
   const map = new Map<string, WarmupMarker[]>();
+  const nonWorkingDateKeys = new Set(holidays.map((holiday) => holiday.dateKey));
 
   holidays.forEach((holiday) => {
     const holidayDate = getAppDateFromKey(holiday.dateKey);
 
-    [3, 2, 1].forEach((offset) => {
-      const dateKey = toDateKey(subDays(holidayDate, offset));
+    collectNearbyWorkingDateKeys(holidayDate, 3, "backward", nonWorkingDateKeys).forEach((dateKey) => {
       const marker: WarmupMarker = {
         dateKey,
         holidayName: holiday.name,
@@ -163,8 +168,7 @@ export function buildHolidayWarmupMap(holidays: HolidayMarker[]) {
       map.set(dateKey, bucket);
     });
 
-    [1, 2].forEach((offset) => {
-      const dateKey = toDateKey(addDays(holidayDate, offset));
+    collectNearbyWorkingDateKeys(holidayDate, 2, "forward", nonWorkingDateKeys).forEach((dateKey) => {
       const marker: WarmupMarker = {
         dateKey,
         holidayName: holiday.name,

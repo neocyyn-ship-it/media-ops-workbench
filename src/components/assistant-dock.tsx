@@ -5,7 +5,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { VoiceInput } from "@/components/voice-input";
 import { fetchJson } from "@/lib/client-fetch";
-import type { TaskRecord, TaskSuggestion } from "@/lib/types";
+import { CONTENT_STATUS_LABELS, CONTENT_TYPE_LABELS } from "@/lib/options";
+import type {
+  ContentPlanRecord,
+  ContentPlanSuggestion,
+  TaskRecord,
+  TaskSuggestion,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type AssistantAction = {
@@ -15,11 +21,19 @@ type AssistantAction = {
   error?: string;
 };
 
+type AssistantContentAction = {
+  id: string;
+  suggestion: ContentPlanSuggestion;
+  status: "idle" | "saving" | "done" | "error";
+  error?: string;
+};
+
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   actions?: AssistantAction[];
+  contentActions?: AssistantContentAction[];
 };
 
 const quickPrompts = [
@@ -137,7 +151,7 @@ export function AssistantDock() {
     return data.reply;
   }
 
-  async function requestTaskSuggestions(message: string) {
+async function requestTaskSuggestions(message: string) {
     if (!shouldSuggestTaskActions(message)) {
       return [];
     }
@@ -150,8 +164,27 @@ export function AssistantDock() {
       return response.suggestions.slice(0, 4);
     } catch {
       return [];
-    }
   }
+}
+
+async function requestContentSuggestions(message: string) {
+  if (!shouldSuggestTaskActions(message)) {
+    return [];
+  }
+
+  try {
+    const response = await fetchJson<{ suggestions: ContentPlanSuggestion[] }>(
+      "/api/assist/content",
+      {
+        method: "POST",
+        body: JSON.stringify({ input: message }),
+      },
+    );
+    return response.suggestions.slice(0, 3);
+  } catch {
+    return [];
+  }
+}
 
   async function sendMessage(rawMessage: string) {
     const message = rawMessage.trim();
@@ -169,9 +202,10 @@ export function AssistantDock() {
     setError("");
 
     try {
-      const [reply, suggestions] = await Promise.all([
+      const [reply, suggestions, contentSuggestions] = await Promise.all([
         requestAssistantReply(message),
         requestTaskSuggestions(message),
+        requestContentSuggestions(message),
       ]);
 
       setMessages((current) => [
@@ -181,6 +215,11 @@ export function AssistantDock() {
           role: "assistant",
           content: reply,
           actions: suggestions.map((suggestion) => ({
+            id: crypto.randomUUID(),
+            suggestion,
+            status: "idle" as const,
+          })),
+          contentActions: contentSuggestions.map((suggestion) => ({
             id: crypto.randomUUID(),
             suggestion,
             status: "idle" as const,
@@ -254,6 +293,64 @@ export function AssistantDock() {
             : {
                 ...message,
                 actions: message.actions?.map((action) =>
+                  action.id === actionId
+                    ? { ...action, status: "error", error: messageText }
+                    : action,
+                ),
+              },
+        ),
+      );
+    }
+  }
+
+  async function createContentPlanFromSuggestion(messageId: string, actionId: string) {
+    setMessages((current) =>
+      current.map((message) =>
+        message.id !== messageId
+          ? message
+          : {
+              ...message,
+              contentActions: message.contentActions?.map((action) =>
+                action.id === actionId ? { ...action, status: "saving", error: undefined } : action,
+              ),
+            },
+      ),
+    );
+
+    const targetMessage = messages.find((message) => message.id === messageId);
+    const targetAction = targetMessage?.contentActions?.find((action) => action.id === actionId);
+    if (!targetAction) return;
+
+    try {
+      await fetchJson<ContentPlanRecord>("/api/content", {
+        method: "POST",
+        body: JSON.stringify({
+          ...targetAction.suggestion,
+        }),
+      });
+
+      setMessages((current) =>
+        current.map((message) =>
+          message.id !== messageId
+            ? message
+            : {
+                ...message,
+                contentActions: message.contentActions?.map((action) =>
+                  action.id === actionId ? { ...action, status: "done", error: undefined } : action,
+                ),
+              },
+        ),
+      );
+    } catch (requestError) {
+      const messageText =
+        requestError instanceof Error ? requestError.message : "加入内容排期失败。";
+      setMessages((current) =>
+        current.map((message) =>
+          message.id !== messageId
+            ? message
+            : {
+                ...message,
+                contentActions: message.contentActions?.map((action) =>
                   action.id === actionId
                     ? { ...action, status: "error", error: messageText }
                     : action,
@@ -340,6 +437,50 @@ export function AssistantDock() {
                               </>
                             ) : (
                               "加入任务"
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {message.role === "assistant" && message.contentActions?.length ? (
+                  <div className="space-y-2 pl-1">
+                    <div className="text-xs font-medium text-slate-500">可直接加入内容排期</div>
+                    {message.contentActions.map((action) => (
+                      <div key={action.id} className="rounded-2xl border bg-white/80 px-3 py-3">
+                        <div className="text-sm font-medium">{action.suggestion.title}</div>
+                        <div className="mt-1 text-xs muted-text">
+                          {action.suggestion.publishAt
+                            ? `排期 ${action.suggestion.publishAt}`
+                            : "暂未识别具体时间"}
+                        </div>
+                        <div className="mt-1 text-xs muted-text">
+                          {CONTENT_TYPE_LABELS[action.suggestion.contentType]} · {CONTENT_STATUS_LABELS[action.suggestion.status]}
+                        </div>
+                        {action.error ? (
+                          <div className="mt-2 text-xs text-rose-700">{action.error}</div>
+                        ) : null}
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            type="button"
+                            className="button-secondary gap-2 text-xs"
+                            disabled={action.status === "saving" || action.status === "done"}
+                            onClick={() => void createContentPlanFromSuggestion(message.id, action.id)}
+                          >
+                            {action.status === "saving" ? (
+                              <>
+                                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                                加入中
+                              </>
+                            ) : action.status === "done" ? (
+                              <>
+                                <Check className="h-3.5 w-3.5" />
+                                已加入
+                              </>
+                            ) : (
+                              "加入排期"
                             )}
                           </button>
                         </div>

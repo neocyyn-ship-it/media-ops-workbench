@@ -17,6 +17,7 @@ import {
   listReportDrafts,
   listTasks,
 } from "@/lib/repository";
+import { WORK_SCHEDULE_TEXT } from "@/lib/work-schedule";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,7 @@ function buildSystemPrompt() {
   return `
 你是“个人新媒体运营工作台”里的 AI 运营助理，服务对象是服装类小红书运营。
 请始终使用简体中文，语气专业、利落、可执行。
+用户默认工作时间是 ${WORK_SCHEDULE_TEXT}，周末默认不安排人工工作；节假日预热请尽量前移到之前的工作日完成。
 
 优先帮助用户：
 1. 拆解任务、排优先级、补充截止时间建议
