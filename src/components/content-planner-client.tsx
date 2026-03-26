@@ -27,7 +27,10 @@ import {
   ChevronRight,
   GripVertical,
   Lightbulb,
+  Pencil,
   Plus,
+  Trash2,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -567,6 +570,7 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
   const today = useMemo(() => getAppToday(), []);
   const [plans, setPlans] = useState(initialPlans);
   const [form, setForm] = useState(initialForm);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [topic, setTopic] = useState("面试穿搭直播预告");
   const [suggestion, setSuggestion] = useState<ContentSuggestion | null>(null);
   const [message, setMessage] = useState("");
@@ -714,6 +718,40 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
     }
   }
 
+  async function savePlan() {
+    if (!editingPlanId) {
+      await createPlan();
+      return;
+    }
+
+    try {
+      if (!form.title.trim()) {
+        setMessage("请先填写选题标题。");
+        return;
+      }
+
+      const updated = await fetchJson<ContentPlanRecord>(`/api/content/${editingPlanId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...form,
+          publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : null,
+        }),
+      });
+
+      setPlans((current) => current.map((plan) => (plan.id === editingPlanId ? updated : plan)));
+      setEditingPlanId(null);
+      setForm(initialForm);
+      if (updated.publishAt) {
+        const publishDate = startOfDay(parseISO(updated.publishAt));
+        setVisibleDate(publishDate);
+        setSelectedDate(publishDate);
+      }
+      setMessage("排期已更新。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "保存排期失败，请稍后再试。");
+    }
+  }
+
   async function generateSuggestion() {
     try {
       const response = await fetchJson<{ suggestion: ContentSuggestion }>("/api/content/suggest", {
@@ -756,6 +794,43 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
       setDragPlanId(null);
       setMovingPlanId(null);
     }
+  }
+
+  function startEditingPlan(plan: ContentPlanRecord) {
+    setEditingPlanId(plan.id);
+    setForm({
+      title: plan.title,
+      contentType: plan.contentType,
+      audience: plan.audience,
+      scenario: plan.scenario,
+      product: plan.product,
+      script: plan.script,
+      publishAt: toDatetimeLocalValue(plan.publishAt),
+      status: plan.status,
+      calendarLabel: resolveCalendarLabel(plan),
+      dataNote: plan.dataNote ?? "",
+    });
+    setMessage(`正在编辑「${plan.title}」`);
+  }
+
+  function cancelEditingPlan() {
+    setEditingPlanId(null);
+    setForm(initialForm);
+    setMessage("已取消编辑。");
+  }
+
+  async function removePlan(plan: ContentPlanRecord) {
+    if (!window.confirm(`确定删除排期「${plan.title}」吗？`)) return;
+
+    await fetchJson(`/api/content/${plan.id}`, {
+      method: "DELETE",
+    });
+    setPlans((current) => current.filter((item) => item.id !== plan.id));
+    if (editingPlanId === plan.id) {
+      setEditingPlanId(null);
+      setForm(initialForm);
+    }
+    setMessage("排期已删除。");
   }
 
   function shiftWindow(direction: -1 | 1) {
@@ -995,6 +1070,17 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
                       </div>
                     </div>
 
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button type="button" className="button-secondary gap-2" onClick={() => startEditingPlan(plan)}>
+                        <Pencil className="h-4 w-4" />
+                        编辑
+                      </button>
+                      <button type="button" className="button-secondary gap-2" onClick={() => void removePlan(plan)}>
+                        <Trash2 className="h-4 w-4" />
+                        删除
+                      </button>
+                    </div>
+
                     <div className="mt-4 grid gap-3 text-sm muted-text md:grid-cols-2">
                       <div>目标人群：{plan.audience}</div>
                       <div>场景：{plan.scenario}</div>
@@ -1158,9 +1244,15 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
           </div>
 
           <div className="mt-4 flex flex-wrap gap-3">
-            <button type="button" className="button-primary" onClick={() => void createPlan()}>
-              加入日历
+            <button type="button" className="button-primary" onClick={() => void savePlan()}>
+              {editingPlanId ? "保存修改" : "加入日历"}
             </button>
+            {editingPlanId ? (
+              <button type="button" className="button-secondary gap-2" onClick={cancelEditingPlan}>
+                <X className="h-4 w-4" />
+                取消编辑
+              </button>
+            ) : null}
             {message ? <span className="self-center text-sm muted-text">{message}</span> : null}
           </div>
         </SectionCard>
@@ -1247,6 +1339,16 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
                       <Badge tone="accent">{CONTENT_STATUS_LABELS[plan.status]}</Badge>
                     </div>
                     <div className="mt-3 text-lg font-semibold">{plan.title}</div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button type="button" className="button-secondary gap-2" onClick={() => startEditingPlan(plan)}>
+                        <Pencil className="h-4 w-4" />
+                        编辑
+                      </button>
+                      <button type="button" className="button-secondary gap-2" onClick={() => void removePlan(plan)}>
+                        <Trash2 className="h-4 w-4" />
+                        删除
+                      </button>
+                    </div>
                     <div className="mt-2 flex items-center gap-2 text-sm muted-text">
                       <GripVertical className="h-4 w-4" />
                       拖到日历中的某一天，就会自动排到当天

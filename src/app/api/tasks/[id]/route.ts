@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getTaskById, updateTask } from "@/lib/repository";
+import { deleteTask, getTaskById, updateTask } from "@/lib/repository";
 import { isOneOf } from "@/lib/options";
 import {
   TASK_CADENCES,
@@ -33,5 +33,19 @@ export async function PATCH(
       typeof body.isTodayFocus === "boolean" ? body.isTodayFocus : undefined,
   });
 
+  return NextResponse.json(task);
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  if (!getTaskById(id)) {
+    return NextResponse.json({ error: "任务不存在" }, { status: 404 });
+  }
+
+  const task = deleteTask(id);
   return NextResponse.json(task);
 }

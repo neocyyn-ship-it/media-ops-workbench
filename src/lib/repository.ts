@@ -338,6 +338,14 @@ export function updateTask(
   return getTaskById(id);
 }
 
+export function deleteTask(id: string) {
+  const task = getTaskById(id);
+  if (!task) return null;
+
+  getDb().prepare("DELETE FROM tasks WHERE id = ?").run(id);
+  return task;
+}
+
 export function getWorkspaceDay(date = new Date()) {
   const dateKey = getAppDateKey(date);
   let row = getDb()
@@ -520,11 +528,26 @@ export function updateContentPlan(
   return getContentPlanById(id);
 }
 
+export function deleteContentPlan(id: string) {
+  const plan = getContentPlanById(id);
+  if (!plan) return null;
+
+  getDb().prepare("DELETE FROM content_plans WHERE id = ?").run(id);
+  return plan;
+}
+
 export function listInspirationItems() {
   const rows = getDb()
     .prepare(`${inspirationBaseSelect} ORDER BY captured_at DESC`)
     .all() as Row[];
   return rows.map(mapInspiration);
+}
+
+export function getInspirationItemById(id: string) {
+  const row = getDb()
+    .prepare(`${inspirationBaseSelect} WHERE id = ?`)
+    .get(id) as Row | undefined;
+  return row ? mapInspiration(row) : null;
 }
 
 export function createInspirationItem(input: {
@@ -567,11 +590,65 @@ export function createInspirationItem(input: {
   return mapInspiration(row);
 }
 
+export function updateInspirationItem(
+  id: string,
+  patch: Partial<{
+    link: string | null;
+    screenshot: string | null;
+    sourceAccount: string;
+    type: InspirationRecord["type"];
+    hookSummary: string;
+    reusableIdea: string;
+    tags: string;
+  }>,
+) {
+  const updates: Record<string, string | null> = {};
+  if (patch.link !== undefined) updates.link = patch.link;
+  if (patch.screenshot !== undefined) updates.screenshot = patch.screenshot;
+  if (patch.sourceAccount !== undefined) updates.source_account = patch.sourceAccount;
+  if (patch.type !== undefined) updates.type = patch.type;
+  if (patch.hookSummary !== undefined) updates.hook_summary = patch.hookSummary;
+  if (patch.reusableIdea !== undefined) updates.reusable_idea = patch.reusableIdea;
+  if (patch.tags !== undefined) updates.tags = patch.tags;
+
+  const fields = Object.keys(updates);
+  if (fields.length === 0) {
+    return getInspirationItemById(id);
+  }
+
+  const values = {
+    ...updates,
+    id,
+  };
+
+  const setClause = fields.map((field) => `${field} = @${field}`);
+  getDb()
+    .prepare(`UPDATE inspiration_items SET ${setClause.join(", ")} WHERE id = @id`)
+    .run(values);
+
+  return getInspirationItemById(id);
+}
+
+export function deleteInspirationItem(id: string) {
+  const item = getInspirationItemById(id);
+  if (!item) return null;
+
+  getDb().prepare("DELETE FROM inspiration_items WHERE id = ?").run(id);
+  return item;
+}
+
 export function listCompetitorObservations() {
   const rows = getDb()
     .prepare(`${competitorBaseSelect} ORDER BY observed_at DESC`)
     .all() as Row[];
   return rows.map(mapCompetitor);
+}
+
+export function getCompetitorObservationById(id: string) {
+  const row = getDb()
+    .prepare(`${competitorBaseSelect} WHERE id = ?`)
+    .get(id) as Row | undefined;
+  return row ? mapCompetitor(row) : null;
 }
 
 export function createCompetitorObservation(input: {
@@ -614,11 +691,65 @@ export function createCompetitorObservation(input: {
   return mapCompetitor(row);
 }
 
+export function updateCompetitorObservation(
+  id: string,
+  patch: Partial<{
+    accountName: string;
+    platform: CompetitorRecord["platform"];
+    contentLink: string | null;
+    contentTopic: string;
+    hookPoint: string;
+    commentInsight: string;
+    takeaway: string;
+  }>,
+) {
+  const updates: Record<string, string | null> = {};
+  if (patch.accountName !== undefined) updates.account_name = patch.accountName;
+  if (patch.platform !== undefined) updates.platform = patch.platform;
+  if (patch.contentLink !== undefined) updates.content_link = patch.contentLink;
+  if (patch.contentTopic !== undefined) updates.content_topic = patch.contentTopic;
+  if (patch.hookPoint !== undefined) updates.hook_point = patch.hookPoint;
+  if (patch.commentInsight !== undefined) updates.comment_insight = patch.commentInsight;
+  if (patch.takeaway !== undefined) updates.takeaway = patch.takeaway;
+
+  const fields = Object.keys(updates);
+  if (fields.length === 0) {
+    return getCompetitorObservationById(id);
+  }
+
+  const values = {
+    ...updates,
+    id,
+  };
+
+  const setClause = fields.map((field) => `${field} = @${field}`);
+  getDb()
+    .prepare(`UPDATE competitor_observations SET ${setClause.join(", ")} WHERE id = @id`)
+    .run(values);
+
+  return getCompetitorObservationById(id);
+}
+
+export function deleteCompetitorObservation(id: string) {
+  const item = getCompetitorObservationById(id);
+  if (!item) return null;
+
+  getDb().prepare("DELETE FROM competitor_observations WHERE id = ?").run(id);
+  return item;
+}
+
 export function listHotTopics() {
   const rows = getDb()
     .prepare(`${topicBaseSelect} ORDER BY happened_at DESC`)
     .all() as Row[];
   return rows.map(mapHotTopic);
+}
+
+export function getHotTopicById(id: string) {
+  const row = getDb()
+    .prepare(`${topicBaseSelect} WHERE id = ?`)
+    .get(id) as Row | undefined;
+  return row ? mapHotTopic(row) : null;
 }
 
 export function createHotTopic(input: {
@@ -652,6 +783,49 @@ export function createHotTopic(input: {
     .prepare(`${topicBaseSelect} WHERE id = ?`)
     .get(record.id) as Row;
   return mapHotTopic(row);
+}
+
+export function updateHotTopic(
+  id: string,
+  patch: Partial<{
+    keyword: string;
+    type: HotTopicRecord["type"];
+    source: string;
+    happenedAt: string | null;
+    usableDirection: string;
+  }>,
+) {
+  const updates: Record<string, string | null> = {};
+  if (patch.keyword !== undefined) updates.keyword = patch.keyword;
+  if (patch.type !== undefined) updates.type = patch.type;
+  if (patch.source !== undefined) updates.source = patch.source;
+  if (patch.happenedAt !== undefined) updates.happened_at = patch.happenedAt;
+  if (patch.usableDirection !== undefined) updates.usable_direction = patch.usableDirection;
+
+  const fields = Object.keys(updates);
+  if (fields.length === 0) {
+    return getHotTopicById(id);
+  }
+
+  const values = {
+    ...updates,
+    id,
+  };
+
+  const setClause = fields.map((field) => `${field} = @${field}`);
+  getDb()
+    .prepare(`UPDATE hot_topics SET ${setClause.join(", ")} WHERE id = @id`)
+    .run(values);
+
+  return getHotTopicById(id);
+}
+
+export function deleteHotTopic(id: string) {
+  const item = getHotTopicById(id);
+  if (!item) return null;
+
+  getDb().prepare("DELETE FROM hot_topics WHERE id = ?").run(id);
+  return item;
 }
 
 export function listReportDrafts(limit = 10) {

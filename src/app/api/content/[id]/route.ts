@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { isOneOf } from "@/lib/options";
-import { getContentPlanById, updateContentPlan } from "@/lib/repository";
+import { deleteContentPlan, getContentPlanById, updateContentPlan } from "@/lib/repository";
 import { CALENDAR_LABELS, CONTENT_STATUSES, CONTENT_TYPES } from "@/lib/types";
 
 export async function PATCH(
@@ -30,5 +30,19 @@ export async function PATCH(
     dataNote: body.dataNote === undefined ? undefined : body.dataNote?.trim() || null,
   });
 
+  return NextResponse.json(plan);
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  if (!getContentPlanById(id)) {
+    return NextResponse.json({ error: "内容排期不存在" }, { status: 404 });
+  }
+
+  const plan = deleteContentPlan(id);
   return NextResponse.json(plan);
 }

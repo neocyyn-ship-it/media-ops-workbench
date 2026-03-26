@@ -1,6 +1,6 @@
 "use client";
 
-import { Pin, Plus } from "lucide-react";
+import { Pencil, Pin, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/badge";
@@ -18,12 +18,20 @@ import {
   TASK_TYPE_OPTIONS,
 } from "@/lib/options";
 import { taskPriorityTone, taskStatusTone } from "@/lib/presentation";
-import type { TaskCadence, TaskPriority, TaskRecord, TaskStatus, TaskType, TaskView } from "@/lib/types";
+import type {
+  TaskCadence,
+  TaskPriority,
+  TaskRecord,
+  TaskStatus,
+  TaskType,
+  TaskView,
+} from "@/lib/types";
 import {
   formatDateTime,
   isThisWeekIso,
   isTodayIso,
   relativeDateLabel,
+  toDatetimeLocalValue,
 } from "@/lib/utils";
 
 const initialForm = {
@@ -41,6 +49,7 @@ export function TaskBoardClient({ initialTasks }: { initialTasks: TaskRecord[] }
   const [tasks, setTasks] = useState(initialTasks);
   const [view, setView] = useState<TaskView>("today");
   const [form, setForm] = useState(initialForm);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
   const filteredTasks = useMemo(() => {
@@ -53,18 +62,32 @@ export function TaskBoardClient({ initialTasks }: { initialTasks: TaskRecord[] }
     return tasks;
   }, [tasks, view]);
 
-  async function createTask() {
+  async function saveTask() {
     if (!form.title.trim()) {
       setMessage("请先填写任务名称。");
       return;
     }
 
+    const payload = {
+      ...form,
+      dueAt: form.dueAt ? new Date(form.dueAt).toISOString() : null,
+    };
+
+    if (editingTaskId) {
+      const updated = await fetchJson<TaskRecord>(`/api/tasks/${editingTaskId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      setTasks((current) => current.map((task) => (task.id === editingTaskId ? updated : task)));
+      setEditingTaskId(null);
+      setForm(initialForm);
+      setMessage("任务已更新。");
+      return;
+    }
+
     const created = await fetchJson<TaskRecord>("/api/tasks", {
       method: "POST",
-      body: JSON.stringify({
-        ...form,
-        dueAt: form.dueAt ? new Date(form.dueAt).toISOString() : null,
-      }),
+      body: JSON.stringify(payload),
     });
 
     setTasks((current) => [created, ...current]);
@@ -80,11 +103,48 @@ export function TaskBoardClient({ initialTasks }: { initialTasks: TaskRecord[] }
     setTasks((current) => current.map((task) => (task.id === taskId ? updated : task)));
   }
 
+  function startEditing(task: TaskRecord) {
+    setEditingTaskId(task.id);
+    setForm({
+      title: task.title,
+      type: task.type,
+      priority: task.priority,
+      dueAt: toDatetimeLocalValue(task.dueAt),
+      owner: task.owner ?? "",
+      status: task.status,
+      notes: task.notes ?? "",
+      cadence: task.cadence,
+    });
+    setMessage(`正在编辑「${task.title}」`);
+  }
+
+  function cancelEditing() {
+    setEditingTaskId(null);
+    setForm(initialForm);
+    setMessage("已取消编辑。");
+  }
+
+  async function removeTask(task: TaskRecord) {
+    if (!window.confirm(`确定删除任务「${task.title}」吗？`)) return;
+
+    await fetchJson(`/api/tasks/${task.id}`, {
+      method: "DELETE",
+    });
+    setTasks((current) => current.filter((item) => item.id !== task.id));
+
+    if (editingTaskId === task.id) {
+      setEditingTaskId(null);
+      setForm(initialForm);
+    }
+
+    setMessage("任务已删除。");
+  }
+
   return (
     <div className="space-y-5">
       <PageHeading
         title="任务管理"
-        description="管理固定任务和临时任务，支持快速新增、切换状态、按今天和本周查看。"
+        description="管理固定任务和临时任务，支持按今天、本周和全部查看，也能直接编辑已有任务。"
         action={
           <div className="flex gap-2">
             {(["today", "week", "all"] as const).map((item) => (
@@ -104,7 +164,7 @@ export function TaskBoardClient({ initialTasks }: { initialTasks: TaskRecord[] }
       <SectionCard>
         <div className="flex items-center gap-2">
           <Plus className="h-5 w-5" />
-          <h3 className="text-xl font-semibold">快速新增任务</h3>
+          <h3 className="text-xl font-semibold">{editingTaskId ? "编辑任务" : "快速新增任务"}</h3>
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -157,7 +217,7 @@ export function TaskBoardClient({ initialTasks }: { initialTasks: TaskRecord[] }
             <input
               value={form.owner}
               onChange={(event) => setForm((current) => ({ ...current, owner: event.target.value }))}
-              placeholder="主播小七 / 摄影 / 自己"
+              placeholder="主播 / 摄影 / 自己"
             />
           </div>
           <div>
@@ -192,16 +252,22 @@ export function TaskBoardClient({ initialTasks }: { initialTasks: TaskRecord[] }
               className="min-h-24"
               value={form.notes}
               onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
-              placeholder="补充任务背景、对接要求、注意事项"
+              placeholder="补充任务背景、对接要求和注意事项"
             />
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-3">
-          <button type="button" className="button-primary gap-2" onClick={() => void createTask()}>
+          <button type="button" className="button-primary gap-2" onClick={() => void saveTask()}>
             <Plus className="h-4 w-4" />
-            新增任务
+            {editingTaskId ? "保存修改" : "新增任务"}
           </button>
+          {editingTaskId ? (
+            <button type="button" className="button-secondary gap-2" onClick={cancelEditing}>
+              <X className="h-4 w-4" />
+              取消编辑
+            </button>
+          ) : null}
           {message ? <span className="self-center text-sm muted-text">{message}</span> : null}
         </div>
       </SectionCard>
@@ -234,12 +300,8 @@ export function TaskBoardClient({ initialTasks }: { initialTasks: TaskRecord[] }
 
                   <div className="flex flex-wrap gap-2">
                     <Badge>{TASK_TYPE_LABELS[task.type]}</Badge>
-                    <Badge tone={taskPriorityTone(task.priority)}>
-                      {TASK_PRIORITY_LABELS[task.priority]}
-                    </Badge>
-                    <Badge tone={taskStatusTone(task.status)}>
-                      {TASK_STATUS_LABELS[task.status]}
-                    </Badge>
+                    <Badge tone={taskPriorityTone(task.priority)}>{TASK_PRIORITY_LABELS[task.priority]}</Badge>
+                    <Badge tone={taskStatusTone(task.status)}>{TASK_STATUS_LABELS[task.status]}</Badge>
                     <Badge>{TASK_CADENCE_LABELS[task.cadence]}</Badge>
                     <Badge>{task.owner || "未指定相关人"}</Badge>
                     <Badge>{relativeDateLabel(task.dueAt)}</Badge>
@@ -268,6 +330,14 @@ export function TaskBoardClient({ initialTasks }: { initialTasks: TaskRecord[] }
                     onClick={() => void updateTask(task.id, { isTodayFocus: !task.isTodayFocus })}
                   >
                     {task.isTodayFocus ? "取消今日重点" : "设为今日重点"}
+                  </button>
+                  <button type="button" className="button-secondary gap-2" onClick={() => startEditing(task)}>
+                    <Pencil className="h-4 w-4" />
+                    编辑
+                  </button>
+                  <button type="button" className="button-secondary gap-2" onClick={() => void removeTask(task)}>
+                    <Trash2 className="h-4 w-4" />
+                    删除
                   </button>
                 </div>
               </div>
