@@ -21,6 +21,18 @@ import {
 export const dynamic = "force-dynamic";
 
 const DEFAULT_MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-5-mini";
+const CUSTOM_BASE_URL = process.env.OPENAI_BASE_URL?.trim() || "";
+
+type ChatCompletionsResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string | Array<{ type?: string; text?: string }>;
+    };
+  }>;
+  error?: {
+    message?: string;
+  };
+};
 
 function summarizeTasks() {
   return listTasks()
@@ -113,20 +125,91 @@ ${message}
 `.trim();
 }
 
+function normalizeBaseUrl(baseUrl: string) {
+  return baseUrl.replace(/\/+$/, "");
+}
+
+function parseCompatibleContent(content: ChatCompletionsResponse["choices"]) {
+  const first = choicesFirstMessageContent(content);
+  if (typeof first === "string") return first.trim();
+  if (Array.isArray(first)) {
+    return first
+      .map((item) => item.text?.trim() || "")
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+  return "";
+}
+
+function choicesFirstMessageContent(choices: ChatCompletionsResponse["choices"]) {
+  return choices?.[0]?.message?.content;
+}
+
+async function callCompatibleChatApi(apiKey: string, message: string) {
+  const baseUrl = normalizeBaseUrl(CUSTOM_BASE_URL);
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: DEFAULT_MODEL,
+      temperature: 0.7,
+      max_tokens: 900,
+      messages: [
+        {
+          role: "system",
+          content: buildSystemPrompt(),
+        },
+        {
+          role: "user",
+          content: buildUserPrompt(message),
+        },
+      ],
+    }),
+  });
+
+  const data = (await response.json()) as ChatCompletionsResponse;
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: response.status,
+      message: data.error?.message || "兼容接口调用失败。",
+    };
+  }
+
+  const reply = parseCompatibleContent(data.choices);
+  if (!reply) {
+    return {
+      ok: false,
+      status: 502,
+      message: "兼容接口没有返回可读文本。",
+    };
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    reply,
+  };
+}
+
 function formatAssistantError(error: unknown) {
   if (error instanceof OpenAI.APIError) {
     if (error.status === 401) {
       return {
         status: 401,
         error:
-          "OpenAI 鉴权失败。请确认 Vercel 中的 OPENAI_API_KEY 是有效的平台 API Key，并在保存后重新部署。",
+          "AI 接口鉴权失败。请确认当前配置的是可用的 API Key；如果你使用的是第三方兼容接口，请同时配置 OPENAI_BASE_URL。",
       };
     }
 
     if (error.status === 429) {
       return {
         status: 429,
-        error: "OpenAI 调用达到频率或额度限制，请稍后重试。",
+        error: "AI 调用达到频率或额度限制，请稍后重试。",
       };
     }
 
@@ -159,6 +242,33 @@ export async function POST(request: Request) {
 
   if (!message) {
     return NextResponse.json({ error: "请输入你想让 AI 助理处理的内容。" }, { status: 400 });
+  }
+
+  if (CUSTOM_BASE_URL) {
+    try {
+      const result = await callCompatibleChatApi(apiKey, message);
+      if (!result.ok) {
+        const errorMessage =
+          result.status === 401
+            ? "第三方兼容接口鉴权失败。请确认 OPENAI_API_KEY 和 OPENAI_BASE_URL 对应且有效。"
+            : result.message;
+        return NextResponse.json({ error: errorMessage }, { status: result.status });
+      }
+
+      return NextResponse.json({
+        reply: result.reply,
+        model: DEFAULT_MODEL,
+        baseUrl: CUSTOM_BASE_URL,
+      });
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "第三方兼容接口调用失败。请检查 OPENAI_BASE_URL 是否正确，并确认该服务兼容 /chat/completions。",
+        },
+        { status: 500 },
+      );
+    }
   }
 
   try {

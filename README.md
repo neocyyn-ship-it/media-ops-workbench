@@ -190,3 +190,19 @@ git push
 - 官方文档当前推荐优先使用 `Responses API`
 - 模型选择上，示例常用 `gpt-5`
 - 这次项目里我默认落成 `gpt-5-mini`，这是基于站内运营助理场景对成本和速度的权衡判断
+
+## Third-Party Compatible API
+
+If your key comes from a third-party provider with an OpenAI-compatible API,
+configure both of these on Vercel:
+
+```bash
+OPENAI_API_KEY=your_third_party_key
+OPENAI_BASE_URL=https://your-provider.example/v1
+```
+
+Notes:
+- When `OPENAI_BASE_URL` is empty, the app uses the official OpenAI `Responses API`.
+- When `OPENAI_BASE_URL` is set, the app switches to the more compatible
+  `/chat/completions` flow for third-party providers.
+- Keep `OPENAI_MODEL` aligned with the model name required by your provider.
