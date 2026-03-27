@@ -54,6 +54,17 @@ const initialMessages: ChatMessage[] = [
   },
 ];
 
+function toLocalDateTimeInputValue(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  const timezoneOffset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
+}
+
+function fromLocalDateTimeInputValue(value: string) {
+  return value ? new Date(value).toISOString() : null;
+}
+
 function normalizeMessage(content: string) {
   return content
     .replace(/\r/g, "")
@@ -133,6 +144,83 @@ export function AssistantDock() {
   }, [messages, open, loading]);
 
   const canSend = useMemo(() => input.trim().length > 0 && !loading, [input, loading]);
+
+  function appendTranscript(text: string) {
+    setInput((current) => {
+      const trimmedCurrent = current.trim();
+      if (!trimmedCurrent) return text;
+      const separator = /[，。！？；]$/.test(trimmedCurrent) ? "" : "，";
+      return `${trimmedCurrent}${separator}${text}`;
+    });
+  }
+
+  function updateTaskSuggestion(
+    messageId: string,
+    actionId: string,
+    updater: (suggestion: TaskSuggestion) => TaskSuggestion,
+  ) {
+    setMessages((current) =>
+      current.map((message) =>
+        message.id !== messageId
+          ? message
+          : {
+              ...message,
+              actions: message.actions?.map((action) =>
+                action.id === actionId
+                  ? { ...action, suggestion: updater(action.suggestion), error: undefined }
+                  : action,
+              ),
+            },
+      ),
+    );
+  }
+
+  function updateContentSuggestion(
+    messageId: string,
+    actionId: string,
+    updater: (suggestion: ContentPlanSuggestion) => ContentPlanSuggestion,
+  ) {
+    setMessages((current) =>
+      current.map((message) =>
+        message.id !== messageId
+          ? message
+          : {
+              ...message,
+              contentActions: message.contentActions?.map((action) =>
+                action.id === actionId
+                  ? { ...action, suggestion: updater(action.suggestion), error: undefined }
+                  : action,
+              ),
+            },
+      ),
+    );
+  }
+
+  function dismissTaskSuggestion(messageId: string, actionId: string) {
+    setMessages((current) =>
+      current.map((message) =>
+        message.id !== messageId
+          ? message
+          : {
+              ...message,
+              actions: message.actions?.filter((action) => action.id !== actionId),
+            },
+      ),
+    );
+  }
+
+  function dismissContentSuggestion(messageId: string, actionId: string) {
+    setMessages((current) =>
+      current.map((message) =>
+        message.id !== messageId
+          ? message
+          : {
+              ...message,
+              contentActions: message.contentActions?.filter((action) => action.id !== actionId),
+            },
+      ),
+    );
+  }
 
   async function requestAssistantReply(message: string) {
     const response = await fetch("/api/assistant/chat", {
@@ -411,14 +499,46 @@ async function requestContentSuggestions(message: string) {
                     <div className="text-xs font-medium text-slate-500">可直接加入任务列表</div>
                     {message.actions.map((action) => (
                       <div key={action.id} className="rounded-2xl border bg-white/80 px-3 py-3">
-                        <div className="text-sm font-medium">{action.suggestion.title}</div>
-                        <div className="mt-1 text-xs muted-text">
-                          {action.suggestion.dueAt ? `截止 ${action.suggestion.dueAt}` : "未识别截止时间"}
+                        <label className="block text-[11px] font-medium text-slate-500">任务内容</label>
+                        <textarea
+                          className="mt-1 min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-[color:var(--accent)]"
+                          value={action.suggestion.title}
+                          onChange={(event) =>
+                            updateTaskSuggestion(message.id, action.id, (suggestion) => ({
+                              ...suggestion,
+                              title: event.target.value,
+                            }))
+                          }
+                          disabled={action.status === "saving" || action.status === "done"}
+                        />
+                        <label className="mt-3 block text-[11px] font-medium text-slate-500">时间</label>
+                        <input
+                          type="datetime-local"
+                          className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-[color:var(--accent)]"
+                          value={toLocalDateTimeInputValue(action.suggestion.dueAt)}
+                          onChange={(event) =>
+                            updateTaskSuggestion(message.id, action.id, (suggestion) => ({
+                              ...suggestion,
+                              dueAt: fromLocalDateTimeInputValue(event.target.value),
+                            }))
+                          }
+                          disabled={action.status === "saving" || action.status === "done"}
+                        />
+                        <div className="mt-2 text-xs muted-text">
+                          {action.suggestion.dueAt ? "会按你修改后的时间加入任务" : "可以留空，后续再补时间"}
                         </div>
                         {action.error ? (
                           <div className="mt-2 text-xs text-rose-700">{action.error}</div>
                         ) : null}
-                        <div className="mt-3 flex justify-end">
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            className="text-xs text-slate-500 transition hover:text-slate-800"
+                            disabled={action.status === "saving" || action.status === "done"}
+                            onClick={() => dismissTaskSuggestion(message.id, action.id)}
+                          >
+                            取消加入
+                          </button>
                           <button
                             type="button"
                             className="button-secondary gap-2 text-xs"
@@ -450,19 +570,46 @@ async function requestContentSuggestions(message: string) {
                     <div className="text-xs font-medium text-slate-500">可直接加入内容排期</div>
                     {message.contentActions.map((action) => (
                       <div key={action.id} className="rounded-2xl border bg-white/80 px-3 py-3">
-                        <div className="text-sm font-medium">{action.suggestion.title}</div>
-                        <div className="mt-1 text-xs muted-text">
-                          {action.suggestion.publishAt
-                            ? `排期 ${action.suggestion.publishAt}`
-                            : "暂未识别具体时间"}
-                        </div>
+                        <label className="block text-[11px] font-medium text-slate-500">排期内容</label>
+                        <textarea
+                          className="mt-1 min-h-20 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-[color:var(--accent)]"
+                          value={action.suggestion.title}
+                          onChange={(event) =>
+                            updateContentSuggestion(message.id, action.id, (suggestion) => ({
+                              ...suggestion,
+                              title: event.target.value,
+                            }))
+                          }
+                          disabled={action.status === "saving" || action.status === "done"}
+                        />
+                        <label className="mt-3 block text-[11px] font-medium text-slate-500">排期时间</label>
+                        <input
+                          type="datetime-local"
+                          className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-[color:var(--accent)]"
+                          value={toLocalDateTimeInputValue(action.suggestion.publishAt)}
+                          onChange={(event) =>
+                            updateContentSuggestion(message.id, action.id, (suggestion) => ({
+                              ...suggestion,
+                              publishAt: fromLocalDateTimeInputValue(event.target.value),
+                            }))
+                          }
+                          disabled={action.status === "saving" || action.status === "done"}
+                        />
                         <div className="mt-1 text-xs muted-text">
                           {CONTENT_TYPE_LABELS[action.suggestion.contentType]} · {CONTENT_STATUS_LABELS[action.suggestion.status]}
                         </div>
                         {action.error ? (
                           <div className="mt-2 text-xs text-rose-700">{action.error}</div>
                         ) : null}
-                        <div className="mt-3 flex justify-end">
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            className="text-xs text-slate-500 transition hover:text-slate-800"
+                            disabled={action.status === "saving" || action.status === "done"}
+                            onClick={() => dismissContentSuggestion(message.id, action.id)}
+                          >
+                            取消加入
+                          </button>
                           <button
                             type="button"
                             className="button-secondary gap-2 text-xs"
@@ -520,12 +667,11 @@ async function requestContentSuggestions(message: string) {
                 <div className="mt-2">
                   <VoiceInput
                     onTranscript={(text) => {
-                      setInput(text);
-                      void sendMessage(text);
+                      appendTranscript(text);
                     }}
                   />
                 </div>
-                <div className="mt-1 text-[11px] text-slate-400">识别完成后会自动发送给 AI</div>
+                <div className="mt-1 text-[11px] text-slate-400">识别内容会先填进输入框，你确认后再发送</div>
               </div>
             </div>
 

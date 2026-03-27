@@ -37,6 +37,8 @@ export function VoiceInput({
 }) {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const transcriptRef = useRef("");
+  const keepListeningRef = useRef(false);
+  const manualStopRef = useRef(false);
   const [isListening, setIsListening] = useState(false);
   const [status, setStatus] = useState<"idle" | "listening" | "success" | "error">("idle");
   const [statusText, setStatusText] = useState("点击开始语音输入");
@@ -52,20 +54,23 @@ export function VoiceInput({
     if (!Recognition) return;
     const recognition = new Recognition();
     recognition.lang = "zh-CN";
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onresult = (event) => {
-      const results = Array.from(event.results);
-      const finalText = results
-        .filter((result) => result.isFinal)
-        .map((result) => result[0]?.transcript ?? "")
-        .join("")
-        .trim();
-      const interimText = results
-        .filter((result) => !result.isFinal)
-        .map((result) => result[0]?.transcript ?? "")
-        .join("")
-        .trim();
+      let finalText = "";
+      let interimText = "";
+
+      for (let index = event.resultIndex ?? 0; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const transcript = result[0]?.transcript?.trim() ?? "";
+        if (!transcript) continue;
+
+        if (result.isFinal) {
+          finalText += transcript;
+        } else {
+          interimText += transcript;
+        }
+      }
 
       if (interimText) {
         setStatus("listening");
@@ -73,27 +78,56 @@ export function VoiceInput({
       }
 
       if (finalText) {
-        transcriptRef.current = finalText;
+        transcriptRef.current = transcriptRef.current
+          ? `${transcriptRef.current}${transcriptRef.current.endsWith("。") ? "" : "，"}${finalText}`
+          : finalText;
         onTranscript(finalText);
-        setStatus("success");
-        setStatusText(`已识别：${finalText.length > 18 ? `${finalText.slice(0, 18)}...` : finalText}`);
+        setStatus("listening");
+        setStatusText(
+          `已追加：${finalText.length > 18 ? `${finalText.slice(0, 18)}...` : finalText}，继续说或手动结束`,
+        );
       }
     };
     recognition.onerror = () => {
+      keepListeningRef.current = false;
       setIsListening(false);
       setStatus("error");
       setStatusText("识别失败，请再试一次");
     };
     recognition.onend = () => {
+      if (keepListeningRef.current && !manualStopRef.current) {
+        try {
+          recognition.start();
+          setIsListening(true);
+          setStatus("listening");
+          setStatusText("正在听你说...点击结束录音才会停止");
+          return;
+        } catch {
+          keepListeningRef.current = false;
+          setIsListening(false);
+          setStatus("error");
+          setStatusText("重新开启录音失败，请再试一次");
+          return;
+        }
+      }
+
       setIsListening(false);
+      keepListeningRef.current = false;
       if (!transcriptRef.current) {
         setStatus("idle");
-        setStatusText("录音结束，未识别到内容");
+        setStatusText("已停止录音，未识别到内容");
+      } else if (manualStopRef.current) {
+        setStatus("success");
+        setStatusText("已停止录音，内容已填入输入框");
       }
+      manualStopRef.current = false;
     };
     recognitionRef.current = recognition;
 
-    return () => recognition.stop();
+    return () => {
+      keepListeningRef.current = false;
+      recognition.stop();
+    };
   }, [onTranscript, supported]);
 
   if (!supported) {
@@ -110,13 +144,17 @@ export function VoiceInput({
   const toggle = () => {
     if (!recognitionRef.current) return;
     if (isListening) {
+      manualStopRef.current = true;
+      keepListeningRef.current = false;
       recognitionRef.current.stop();
       setIsListening(false);
       return;
     }
     transcriptRef.current = "";
+    manualStopRef.current = false;
+    keepListeningRef.current = true;
     setStatus("listening");
-    setStatusText("正在听你说...");
+    setStatusText("正在听你说...点击结束录音才会停止");
     recognitionRef.current.start();
     setIsListening(true);
   };
