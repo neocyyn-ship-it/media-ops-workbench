@@ -1,4 +1,4 @@
-import { addDays, format, startOfDay } from "date-fns";
+import { addDays, format, getDay, startOfDay } from "date-fns";
 
 import { getDefaultCalendarLabel } from "@/lib/calendar";
 import type {
@@ -12,16 +12,118 @@ import type {
   TaskSuggestion,
   TaskType,
 } from "@/lib/types";
-import { buildWorkingDateTime } from "@/lib/work-schedule";
+import {
+  buildWorkingDateTime,
+  WORK_END_HOUR,
+  WORK_END_MINUTE,
+  WORK_START_HOUR,
+  WORK_START_MINUTE,
+} from "@/lib/work-schedule";
+
+type TemporalContext = {
+  dayOffset?: number;
+  timeMinutes?: number | null;
+};
+
+type ParsedActionSegment = {
+  raw: string;
+  dueAt: string | null;
+  context: TemporalContext;
+};
+
+const WEEKDAY_MAP: Record<string, number> = {
+  日: 0,
+  天: 0,
+  一: 1,
+  二: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+};
+
+const ACTION_CUE_PATTERN =
+  /(对货|库存|货盘|补货|直播|主播|搭配|拍摄|补拍|脚本|文案|标题|封面|预告|图文|视频|复盘|数据|整理|确认|跟进|发布|上新|选题|剪辑|拍|写|出|发|做|对|跟|复|整|确|看|排|补|剪)/;
+const CONNECTOR_PATTERN = /^(然后|接着|随后|最后|另外|顺便|还要|还得|并且|再)/;
+const INTERNAL_TIME_MARKER_PATTERN =
+  /(今天|明天|后天|今晚|明早|明晚|下周[一二三四五六日天]?|本周[一二三四五六日天]?|周[一二三四五六日天]|星期[一二三四五六日天]|早上|上午|中午|下午|晚上|\d{1,2}(?:[:：\.点时](?:\d{1,2}|半)?(?:分)?))/g;
 
 function normalizeText(input: string) {
-  return input.replace(/\r/g, "").replace(/[；;]/g, "。").replace(/[，,]/g, "。").trim();
+  return input
+    .replace(/\r/g, "")
+    .replace(/[；;]/g, "。")
+    .replace(/[，,、]/g, "。")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function insertImplicitBoundaries(input: string) {
+  return input
+    .replace(/(?<=[^。\n])(?=(然后|接着|随后|最后|另外|顺便|还要|还得|并且))/g, "。")
+    .replace(/(?<=[^。\n])(?=再(?:去|做|出|发|拍|写|跟|对|复|整|确|看|排|补|剪|上|聊|约|开|跟进|发布|安排|准备))/g, "。");
+}
+
+function cleanLeadingConnector(text: string) {
+  return text.replace(CONNECTOR_PATTERN, "").trim();
+}
+
+function isExplicitDayMarker(marker: string) {
+  return /^(今天|明天|后天|今晚|明早|明晚|下周|本周|周|星期)/.test(marker);
+}
+
+function isTimeOnlyMarker(marker: string) {
+  return /^(早上|上午|中午|下午|晚上|\d{1,2})/.test(marker);
+}
+
+function shouldSplitAtMarker(prefix: string, marker: string) {
+  const normalizedPrefix = cleanLeadingConnector(prefix.trim());
+  if (!normalizedPrefix || normalizedPrefix.length < 2) {
+    return false;
+  }
+
+  if (!ACTION_CUE_PATTERN.test(normalizedPrefix)) {
+    return false;
+  }
+
+  if (isExplicitDayMarker(marker)) {
+    return normalizedPrefix.length >= 4;
+  }
+
+  if (isTimeOnlyMarker(marker)) {
+    return normalizedPrefix.length >= 4;
+  }
+
+  return false;
+}
+
+function splitEmbeddedSegments(segment: string) {
+  const parts: string[] = [];
+  let cursor = 0;
+
+  for (const match of segment.matchAll(INTERNAL_TIME_MARKER_PATTERN)) {
+    const index = match.index ?? 0;
+    if (index <= cursor) continue;
+
+    const marker = match[0];
+    const prefix = segment.slice(cursor, index);
+    if (!shouldSplitAtMarker(prefix, marker)) {
+      continue;
+    }
+
+    parts.push(segment.slice(cursor, index).trim());
+    cursor = index;
+  }
+
+  parts.push(segment.slice(cursor).trim());
+
+  return parts.filter(Boolean);
 }
 
 function splitSegments(input: string) {
-  return normalizeText(input)
+  return insertImplicitBoundaries(normalizeText(input))
     .split(/[。\n]/)
-    .map((segment) => segment.trim())
+    .flatMap((segment) => splitEmbeddedSegments(segment.trim()))
+    .map((segment) => cleanLeadingConnector(segment))
     .filter(Boolean);
 }
 
@@ -43,59 +145,171 @@ function inferTaskPriority(text: string): TaskPriority {
   return "MEDIUM";
 }
 
-function extractDueAt(text: string) {
-  const now = new Date();
-  let base = startOfDay(now);
+function getOffsetToWeekday(targetWeekday: number, now: Date, forceNextWeek = false) {
+  const currentWeekday = getDay(now);
+  let offset = targetWeekday - currentWeekday;
 
-  if (/后天/.test(text)) base = addDays(base, 2);
-  else if (/明天|明早|明晚/.test(text)) base = addDays(base, 1);
-  else if (/下周/.test(text)) base = addDays(base, 7);
+  if (offset < 0) {
+    offset += 7;
+  }
 
-  const timeMatch = text.match(/(\d{1,2})点(?:(\d{1,2})分?)?/);
-  let hour = 18;
-  let minute = 0;
+  if (forceNextWeek || offset === 0) {
+    offset += 7;
+  }
 
-  if (timeMatch) {
-    hour = Number(timeMatch[1]);
-    minute = timeMatch[2] ? Number(timeMatch[2]) : 0;
-    if (/下午|晚上/.test(text) && hour < 12) hour += 12;
-    if (/中午/.test(text) && hour < 11) hour += 12;
-  } else if (/早上|上午|明早/.test(text)) {
-    hour = 10;
-  } else if (/中午/.test(text)) {
-    hour = 12;
-  } else if (/下午/.test(text)) {
-    hour = 15;
-  } else if (/晚上|今晚|明晚/.test(text)) {
-    hour = 20;
-  } else if (/今天/.test(text)) {
-    hour = 18;
-  } else if (/明天/.test(text)) {
-    hour = 10;
-  } else {
+  return offset;
+}
+
+function resolveExplicitDayOffset(text: string, now: Date) {
+  if (/后天/.test(text)) return 2;
+  if (/明天|明早|明晚/.test(text)) return 1;
+  if (/今天|今晚/.test(text)) return 0;
+
+  const nextWeekdayMatch = text.match(/下周([一二三四五六日天])/);
+  if (nextWeekdayMatch) {
+    return getOffsetToWeekday(WEEKDAY_MAP[nextWeekdayMatch[1]], now, true);
+  }
+
+  const weekMatch = text.match(/(?:本周|周|星期)([一二三四五六日天])/);
+  if (weekMatch) {
+    return getOffsetToWeekday(WEEKDAY_MAP[weekMatch[1]], now);
+  }
+
+  if (/下周/.test(text)) return 7;
+  if (/本周/.test(text)) return 0;
+
+  return null;
+}
+
+function clampMinutes(minutes: number) {
+  const minMinutes = WORK_START_HOUR * 60 + WORK_START_MINUTE;
+  const maxMinutes = WORK_END_HOUR * 60 + WORK_END_MINUTE;
+  return Math.max(minMinutes, Math.min(maxMinutes, minutes));
+}
+
+function getNextFollowUpMinutes(previous?: TemporalContext | null) {
+  if (previous?.timeMinutes == null) return null;
+  return clampMinutes(previous.timeMinutes + 90);
+}
+
+function resolveExactTimeMinutes(text: string) {
+  const timeMatch = text.match(/(\d{1,2})(?:[:：\.点时])(?:(\d{1,2})|半)?(?:分)?/);
+  if (!timeMatch) {
     return null;
   }
 
-  return buildWorkingDateTime(base, { hour, minute, direction: "forward" }).toISOString();
+  let hour = Number(timeMatch[1]);
+  const minute = timeMatch[0].includes("半") ? 30 : timeMatch[2] ? Number(timeMatch[2]) : 0;
+
+  if (/下午|晚上|今晚|明晚/.test(text) && hour < 12) hour += 12;
+  if (/中午/.test(text) && hour < 11) hour += 12;
+
+  return clampMinutes(hour * 60 + minute);
+}
+
+function inferDefaultTimeMinutes(text: string, previous?: TemporalContext | null) {
+  const exactTime = resolveExactTimeMinutes(text);
+  if (exactTime != null) {
+    return exactTime;
+  }
+
+  if (/早上|上午|明早/.test(text)) return 10 * 60;
+  if (/中午/.test(text)) return 12 * 60;
+  if (/下午/.test(text)) return 15 * 60;
+  if (/晚上|今晚|明晚/.test(text)) return 18 * 60;
+
+  const followUpTime = getNextFollowUpMinutes(previous);
+  if (followUpTime != null) {
+    return followUpTime;
+  }
+
+  if (/发布|发出|上线|上架/.test(text)) return 15 * 60;
+  if (/直播|主播|搭配|拍摄|补拍/.test(text)) return 15 * 60;
+  if (/脚本|文案|标题|封面|对货|库存|整理|确认|复盘/.test(text)) return 10 * 60;
+
+  return null;
+}
+
+function resolveDueAt(text: string, previous?: TemporalContext | null) {
+  const now = new Date();
+  const explicitDayOffset = resolveExplicitDayOffset(text, now);
+  const resolvedDayOffset = explicitDayOffset ?? previous?.dayOffset;
+  const resolvedTimeMinutes = inferDefaultTimeMinutes(text, previous);
+
+  if (resolvedDayOffset == null && resolvedTimeMinutes == null) {
+    return {
+      dueAt: null,
+      context: previous ?? {},
+    };
+  }
+
+  const baseDate = addDays(startOfDay(now), resolvedDayOffset ?? 0);
+  const targetMinutes =
+    resolvedTimeMinutes ??
+    (previous?.timeMinutes != null ? previous.timeMinutes : 10 * 60);
+
+  return {
+    dueAt: buildWorkingDateTime(baseDate, {
+      hour: Math.floor(targetMinutes / 60),
+      minute: targetMinutes % 60,
+      direction: "forward",
+    }).toISOString(),
+    context: {
+      dayOffset: resolvedDayOffset ?? 0,
+      timeMinutes: targetMinutes,
+    },
+  };
+}
+
+function parseActionSegments(input: string): ParsedActionSegment[] {
+  let previousContext: TemporalContext | null = null;
+
+  return splitSegments(input).map((segment) => {
+    const { dueAt, context } = resolveDueAt(segment, previousContext);
+    previousContext = context;
+
+    return {
+      raw: segment,
+      dueAt,
+      context,
+    };
+  });
 }
 
 function cleanTaskTitle(segment: string) {
-  return segment
-    .replace(/^(今天|今晚|明天|后天|下周|本周|明早|明晚|早上|上午|中午|下午|晚上)/, "")
-    .replace(/^\d{1,2}点(?:\d{1,2}分?)?/, "")
-    .replace(/^(先|再|然后|还要|需要|和)/, "")
-    .trim();
+  let cleaned = segment.trim();
+
+  const removablePatterns = [
+    /^(今天|今晚|明天|后天|下周[一二三四五六日天]?|本周[一二三四五六日天]?|周[一二三四五六日天]|星期[一二三四五六日天]|明早|明晚|早上|上午|中午|下午|晚上)/,
+    /^(?:\d{1,2}(?:[:：\.点时](?:\d{1,2}|半)?(?:分)?)?)/,
+    /^(先|再|然后|接着|最后|顺便|另外|还要|还得|需要|安排|准备|做|出|写|补|去|把|和)/,
+  ];
+
+  let hasChanges = true;
+  while (hasChanges) {
+    hasChanges = false;
+    for (const pattern of removablePatterns) {
+      const next = cleaned.replace(pattern, "").trim();
+      if (next !== cleaned) {
+        cleaned = next;
+        hasChanges = true;
+      }
+    }
+  }
+
+  return cleaned;
 }
 
 export function suggestTasksFromText(input: string): TaskSuggestion[] {
-  return splitSegments(input).map((segment) => {
-    const title = cleanTaskTitle(segment) || segment;
+  return parseActionSegments(input).map(({ raw, dueAt }) => {
+    const title = cleanTaskTitle(raw) || raw;
+    const inferredPriority = inferTaskPriority(raw);
     return {
       title,
-      type: inferTaskType(segment),
-      priority: inferTaskPriority(segment),
-      dueAt: extractDueAt(segment),
-      notes: `由快速输入自动拆解：${segment}`,
+      type: inferTaskType(raw),
+      priority: dueAt && inferredPriority === "MEDIUM" ? "HIGH" : inferredPriority,
+      dueAt,
+      notes: `由快速输入自动拆解：${raw}`,
     };
   });
 }
@@ -140,10 +354,7 @@ function inferScenario(text: string) {
 }
 
 function cleanContentTitle(segment: string) {
-  const cleaned = segment
-    .replace(/^(今天|今晚|明天|后天|下周|本周|明早|明晚|早上|上午|中午|下午|晚上)/, "")
-    .replace(/^\d{1,2}点(?:\d{1,2}分?)?/, "")
-    .replace(/^(先|再|然后|顺便|需要|安排|准备|做|出|写|补)/, "")
+  const cleaned = cleanTaskTitle(segment)
     .replace(/(一下|一版|一个|一条)$/g, "")
     .trim();
 
@@ -157,7 +368,7 @@ function inferContentDataNote(text: string) {
   return null;
 }
 
-function buildContentSuggestion(segment: string): ContentPlanSuggestion {
+function buildContentSuggestion(segment: string, dueAt: string | null): ContentPlanSuggestion {
   const contentType = inferContentType(segment);
   const status = inferContentStatus(segment);
   const calendarLabel: CalendarLabel = getDefaultCalendarLabel(status, contentType);
@@ -169,7 +380,7 @@ function buildContentSuggestion(segment: string): ContentPlanSuggestion {
     scenario: inferScenario(segment),
     product: "待补充",
     script: /脚本|文案|标题|封面/.test(segment) ? segment.trim() : "待补充",
-    publishAt: extractDueAt(segment),
+    publishAt: dueAt,
     status,
     calendarLabel,
     dataNote: inferContentDataNote(segment),
@@ -177,9 +388,9 @@ function buildContentSuggestion(segment: string): ContentPlanSuggestion {
 }
 
 export function suggestContentPlansFromText(input: string): ContentPlanSuggestion[] {
-  return splitSegments(input)
-    .filter((segment) => isContentPlanningSegment(segment))
-    .map((segment) => buildContentSuggestion(segment));
+  return parseActionSegments(input)
+    .filter(({ raw }) => isContentPlanningSegment(raw))
+    .map(({ raw, dueAt }) => buildContentSuggestion(raw, dueAt));
 }
 
 function inferTheme(input: string) {
