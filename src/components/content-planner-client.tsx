@@ -32,7 +32,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 
 import { Badge } from "@/components/badge";
 import { PageHeading } from "@/components/page-heading";
@@ -132,7 +132,7 @@ function DragPlanChip({
   onDragEnd,
 }: {
   plan: ContentPlanRecord;
-  onDragStart: (id: string) => void;
+  onDragStart: (event: DragEvent<HTMLDivElement>, id: string) => void;
   onDragEnd: () => void;
 }) {
   const label = resolveCalendarLabel(plan);
@@ -141,7 +141,7 @@ function DragPlanChip({
   return (
     <div
       draggable
-      onDragStart={() => onDragStart(plan.id)}
+      onDragStart={(event) => onDragStart(event, plan.id)}
       onDragEnd={onDragEnd}
       className="group flex cursor-grab items-center gap-2 rounded-2xl bg-white/90 px-2.5 py-2 text-xs active:cursor-grabbing"
     >
@@ -175,7 +175,7 @@ function DateBadges({
       ) : null}
       {!holiday && isWeekend(date) ? (
         <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">
-          非工作日
+          假期
         </span>
       ) : null}
       {warmup ? (
@@ -218,10 +218,10 @@ function MonthCalendar({
   dropDateKey: string | null;
   movingPlanId: string | null;
   onSelectDate: (date: Date) => void;
-  onPlanDragStart: (id: string) => void;
+  onPlanDragStart: (event: DragEvent<HTMLDivElement>, id: string) => void;
   onPlanDragEnd: () => void;
   onDragOverDate: (dateKey: string | null) => void;
-  onDropToDate: (date: Date) => void;
+  onDropToDate: (date: Date, event: DragEvent<HTMLDivElement>) => void;
 }) {
   return (
     <div className="min-w-[760px]">
@@ -261,7 +261,7 @@ function MonthCalendar({
               onDragLeave={() => onDragOverDate(null)}
               onDrop={(event) => {
                 event.preventDefault();
-                onDropToDate(date);
+                onDropToDate(date, event);
               }}
               role="button"
               tabIndex={0}
@@ -347,10 +347,10 @@ function WeekCalendar({
   dropDateKey: string | null;
   movingPlanId: string | null;
   onSelectDate: (date: Date) => void;
-  onPlanDragStart: (id: string) => void;
+  onPlanDragStart: (event: DragEvent<HTMLDivElement>, id: string) => void;
   onPlanDragEnd: () => void;
   onDragOverDate: (dateKey: string | null) => void;
-  onDropToDate: (date: Date) => void;
+  onDropToDate: (date: Date, event: DragEvent<HTMLDivElement>) => void;
 }) {
   return (
     <div className="grid min-w-[760px] grid-cols-7 gap-3">
@@ -379,7 +379,7 @@ function WeekCalendar({
             onDragLeave={() => onDragOverDate(null)}
             onDrop={(event) => {
               event.preventDefault();
-              onDropToDate(date);
+              onDropToDate(date, event);
             }}
             role="button"
             tabIndex={0}
@@ -435,7 +435,7 @@ function WeekCalendar({
                     <div
                       key={plan.id}
                       draggable
-                      onDragStart={() => onPlanDragStart(plan.id)}
+                      onDragStart={(event) => onPlanDragStart(event, plan.id)}
                       onDragEnd={onPlanDragEnd}
                       className={cn(
                         "cursor-grab rounded-2xl border px-3 py-3 active:cursor-grabbing",
@@ -766,10 +766,11 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
     }
   }
 
-  async function movePlanToDate(date: Date) {
-    if (!dragPlanId) return;
+  async function movePlanToDate(date: Date, event?: DragEvent<HTMLDivElement>) {
+    const draggedId = event?.dataTransfer.getData("text/plain") || dragPlanId;
+    if (!draggedId) return;
 
-    const plan = plans.find((item) => item.id === dragPlanId);
+    const plan = plans.find((item) => item.id === draggedId);
     if (!plan) return;
 
     setMovingPlanId(plan.id);
@@ -859,7 +860,10 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
     }
   }
 
-  function handlePlanDragStart(id: string) {
+  function handlePlanDragStart(event: DragEvent<HTMLDivElement>, id: string) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.dropEffect = "move";
+    event.dataTransfer.setData("text/plain", id);
     setDragPlanId(id);
   }
 
@@ -889,7 +893,7 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
               苹果风排期日历
             </h3>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted-text">
-              颜色标签代表不同工作流。周末默认视为非工作日，节假日前 3 个工作日会自动进入直播预热期，节后 2 个工作日会标出回流观察期。月视图和周视图支持直接拖拽改日期。
+              颜色标签代表不同工作流。周末默认视为假期，节假日前 3 个工作日会自动进入直播预热期，节后 2 个工作日会标出回流观察期。月视图和周视图支持直接拖拽改日期。
             </p>
           </div>
 
@@ -961,7 +965,7 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
         <div className="mt-4 flex flex-wrap gap-2 text-xs muted-text">
           <span className="rounded-full bg-amber-50 px-3 py-1.5 text-amber-700">直播预热期：节前 3 个工作日</span>
           <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700">节后回流期：节后 2 个工作日</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-600">周末默认视为非工作日</span>
+          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-600">周末默认视为假期</span>
           <span className="rounded-full bg-white/80 px-3 py-1.5">拖拽内容卡片到日期格子即可改档期</span>
         </div>
 
@@ -986,7 +990,7 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
               onPlanDragStart={handlePlanDragStart}
               onPlanDragEnd={handlePlanDragEnd}
               onDragOverDate={setDropDateKey}
-              onDropToDate={(date) => void movePlanToDate(date)}
+              onDropToDate={(date, event) => void movePlanToDate(date, event)}
             />
           ) : null}
 
@@ -1003,7 +1007,7 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
               onPlanDragStart={handlePlanDragStart}
               onPlanDragEnd={handlePlanDragEnd}
               onDragOverDate={setDropDateKey}
-              onDropToDate={(date) => void movePlanToDate(date)}
+              onDropToDate={(date, event) => void movePlanToDate(date, event)}
             />
           ) : null}
 
@@ -1329,7 +1333,7 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
                   <div
                     key={plan.id}
                     draggable
-                    onDragStart={() => handlePlanDragStart(plan.id)}
+                    onDragStart={(event) => handlePlanDragStart(event, plan.id)}
                     onDragEnd={handlePlanDragEnd}
                     className={cn(
                       "cursor-grab rounded-[24px] border px-4 py-4 active:cursor-grabbing",
