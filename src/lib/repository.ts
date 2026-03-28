@@ -68,8 +68,18 @@ const contentBaseSelect = `
     script,
     publish_at AS publishAt,
     status,
+    workflow_stage AS workflowStage,
     calendar_label AS calendarLabel,
     data_note AS dataNote,
+    selection_notes AS selectionNotes,
+    business_notes AS businessNotes,
+    inventory_notes AS inventoryNotes,
+    shoot_date AS shootDate,
+    styling_notes AS stylingNotes,
+    camera_notes AS cameraNotes,
+    voiceover_notes AS voiceoverNotes,
+    asset_notes AS assetNotes,
+    edit_brief AS editBrief,
     created_at AS createdAt,
     updated_at AS updatedAt
   FROM content_plans
@@ -171,8 +181,18 @@ function mapContentPlan(row: Row): ContentPlanRecord {
     script: String(row.script),
     publishAt: row.publishAt ? String(row.publishAt) : null,
     status: row.status as ContentPlanRecord["status"],
+    workflowStage: row.workflowStage as ContentPlanRecord["workflowStage"],
     calendarLabel: row.calendarLabel ? (String(row.calendarLabel) as ContentPlanRecord["calendarLabel"]) : null,
     dataNote: row.dataNote ? String(row.dataNote) : null,
+    selectionNotes: row.selectionNotes ? String(row.selectionNotes) : null,
+    businessNotes: row.businessNotes ? String(row.businessNotes) : null,
+    inventoryNotes: row.inventoryNotes ? String(row.inventoryNotes) : null,
+    shootDate: row.shootDate ? String(row.shootDate) : null,
+    stylingNotes: row.stylingNotes ? String(row.stylingNotes) : null,
+    cameraNotes: row.cameraNotes ? String(row.cameraNotes) : null,
+    voiceoverNotes: row.voiceoverNotes ? String(row.voiceoverNotes) : null,
+    assetNotes: row.assetNotes ? String(row.assetNotes) : null,
+    editBrief: row.editBrief ? String(row.editBrief) : null,
     createdAt: String(row.createdAt),
     updatedAt: String(row.updatedAt),
   };
@@ -442,8 +462,18 @@ export function createContentPlan(input: {
   script: string;
   publishAt?: string | null;
   status?: ContentPlanRecord["status"];
+  workflowStage?: ContentPlanRecord["workflowStage"];
   calendarLabel?: ContentPlanRecord["calendarLabel"];
   dataNote?: string | null;
+  selectionNotes?: string | null;
+  businessNotes?: string | null;
+  inventoryNotes?: string | null;
+  shootDate?: string | null;
+  stylingNotes?: string | null;
+  cameraNotes?: string | null;
+  voiceoverNotes?: string | null;
+  assetNotes?: string | null;
+  editBrief?: string | null;
 }) {
   const now = new Date().toISOString();
   const record = {
@@ -456,8 +486,18 @@ export function createContentPlan(input: {
     script: input.script,
     publish_at: input.publishAt ?? null,
     status: input.status ?? "IDEA",
+    workflow_stage: input.workflowStage ?? "TOPIC",
     calendar_label: input.calendarLabel ?? null,
     data_note: input.dataNote ?? null,
+    selection_notes: input.selectionNotes ?? null,
+    business_notes: input.businessNotes ?? null,
+    inventory_notes: input.inventoryNotes ?? null,
+    shoot_date: input.shootDate ?? null,
+    styling_notes: input.stylingNotes ?? null,
+    camera_notes: input.cameraNotes ?? null,
+    voiceover_notes: input.voiceoverNotes ?? null,
+    asset_notes: input.assetNotes ?? null,
+    edit_brief: input.editBrief ?? null,
     created_at: now,
     updated_at: now,
   };
@@ -465,10 +505,16 @@ export function createContentPlan(input: {
     .prepare(`
       INSERT INTO content_plans (
         id, title, content_type, audience, scenario, product, script,
-        publish_at, status, calendar_label, data_note, created_at, updated_at
+        publish_at, status, workflow_stage, calendar_label, data_note,
+        selection_notes, business_notes, inventory_notes, shoot_date,
+        styling_notes, camera_notes, voiceover_notes, asset_notes, edit_brief,
+        created_at, updated_at
       ) VALUES (
         @id, @title, @content_type, @audience, @scenario, @product, @script,
-        @publish_at, @status, @calendar_label, @data_note, @created_at, @updated_at
+        @publish_at, @status, @workflow_stage, @calendar_label, @data_note,
+        @selection_notes, @business_notes, @inventory_notes, @shoot_date,
+        @styling_notes, @camera_notes, @voiceover_notes, @asset_notes, @edit_brief,
+        @created_at, @updated_at
       )
     `)
     .run(record);
@@ -490,8 +536,18 @@ export function updateContentPlan(
     script: string;
     publishAt: string | null;
     status: ContentPlanRecord["status"];
+    workflowStage: ContentPlanRecord["workflowStage"];
     calendarLabel: ContentPlanRecord["calendarLabel"];
     dataNote: string | null;
+    selectionNotes: string | null;
+    businessNotes: string | null;
+    inventoryNotes: string | null;
+    shootDate: string | null;
+    stylingNotes: string | null;
+    cameraNotes: string | null;
+    voiceoverNotes: string | null;
+    assetNotes: string | null;
+    editBrief: string | null;
   }>,
 ) {
   const updates: Record<string, string | null> = {};
@@ -503,8 +559,18 @@ export function updateContentPlan(
   if (patch.script !== undefined) updates.script = patch.script;
   if (patch.publishAt !== undefined) updates.publish_at = patch.publishAt;
   if (patch.status !== undefined) updates.status = patch.status;
+  if (patch.workflowStage !== undefined) updates.workflow_stage = patch.workflowStage;
   if (patch.calendarLabel !== undefined) updates.calendar_label = patch.calendarLabel;
   if (patch.dataNote !== undefined) updates.data_note = patch.dataNote;
+  if (patch.selectionNotes !== undefined) updates.selection_notes = patch.selectionNotes;
+  if (patch.businessNotes !== undefined) updates.business_notes = patch.businessNotes;
+  if (patch.inventoryNotes !== undefined) updates.inventory_notes = patch.inventoryNotes;
+  if (patch.shootDate !== undefined) updates.shoot_date = patch.shootDate;
+  if (patch.stylingNotes !== undefined) updates.styling_notes = patch.stylingNotes;
+  if (patch.cameraNotes !== undefined) updates.camera_notes = patch.cameraNotes;
+  if (patch.voiceoverNotes !== undefined) updates.voiceover_notes = patch.voiceoverNotes;
+  if (patch.assetNotes !== undefined) updates.asset_notes = patch.assetNotes;
+  if (patch.editBrief !== undefined) updates.edit_brief = patch.editBrief;
 
   const fields = Object.keys(updates);
   if (fields.length === 0) {

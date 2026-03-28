@@ -1,5 +1,6 @@
 import type {
   ContentStatus,
+  ContentWorkflowStage,
   InspirationType,
   TaskPriority,
   TaskStatus,
@@ -24,6 +25,15 @@ export function contentStatusTone(status: ContentStatus) {
   if (status === "REVIEWED" || status === "PUBLISHED") return "success";
   if (status === "SCRIPTING" || status === "SHOOTING" || status === "EDITING") return "accent";
   if (status === "SCHEDULED") return "warning";
+  return "neutral";
+}
+
+export function workflowStageTone(stage: ContentWorkflowStage) {
+  if (stage === "DONE") return "success";
+  if (stage === "BUSINESS" || stage === "INVENTORY" || stage === "BOOKING") return "warning";
+  if (stage === "SCRIPT" || stage === "SHOT" || stage === "ASSETS" || stage === "EDIT") {
+    return "accent";
+  }
   return "neutral";
 }
 

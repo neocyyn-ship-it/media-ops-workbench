@@ -7,10 +7,13 @@ import type {
   ContentSuggestion,
   ContentStatus,
   ContentType,
+  ContentWorkflowStage,
   GeneratedReport,
+  HotTopicSuggestion,
   TaskPriority,
   TaskSuggestion,
   TaskType,
+  TopicType,
 } from "@/lib/types";
 import {
   buildWorkingDateTime,
@@ -43,24 +46,31 @@ const WEEKDAY_MAP: Record<string, number> = {
 };
 
 const ACTION_CUE_PATTERN =
-  /(对货|库存|货盘|补货|直播|主播|搭配|拍摄|补拍|脚本|文案|标题|封面|预告|图文|视频|复盘|数据|整理|确认|跟进|发布|上新|选题|剪辑|拍|写|出|发|做|对|跟|复|整|确|看|排|补|剪)/;
-const CONNECTOR_PATTERN = /^(然后|接着|随后|最后|另外|顺便|还要|还得|并且|再)/;
+  /(对货|库存|盘货|补货|直播|主播|搭配|拍摄|补拍|脚本|文案|标题|封面|预告|图文|视频|复盘|数据|整理|确认|跟进|发布|上新|选题|剪辑|理货|约拍|口播|镜头|素材)/;
+const CONNECTOR_PATTERN =
+  /^(然后|接着|随后|最后|另外|顺便|还要|还得|并且|再|先|去|做|把)/;
 const INTERNAL_TIME_MARKER_PATTERN =
-  /(今天|明天|后天|今晚|明早|明晚|下周[一二三四五六日天]?|本周[一二三四五六日天]?|周[一二三四五六日天]|星期[一二三四五六日天]|早上|上午|中午|下午|晚上|\d{1,2}(?:[:：\.点时](?:\d{1,2}|半)?(?:分)?))/g;
+  /(今天|明天|后天|今晚|明早|明晚|下周[一二三四五六日天]?|本周[一二三四五六日天]?|周[一二三四五六日天]|星期[一二三四五六日天]|早上|上午|中午|下午|晚上|\d{1,2}(?:[:：.]?\d{0,2})?(?:点|时)?(?:半)?)/g;
 
 function normalizeText(input: string) {
   return input
     .replace(/\r/g, "")
     .replace(/[；;]/g, "。")
-    .replace(/[，,、]/g, "。")
+    .replace(/[，,]/g, "，")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function insertImplicitBoundaries(input: string) {
   return input
-    .replace(/(?<=[^。\n])(?=(然后|接着|随后|最后|另外|顺便|还要|还得|并且))/g, "。")
-    .replace(/(?<=[^。\n])(?=再(?:去|做|出|发|拍|写|跟|对|复|整|确|看|排|补|剪|上|聊|约|开|跟进|发布|安排|准备))/g, "。");
+    .replace(
+      /(?<=[^。\n])(?=(然后|接着|随后|最后|另外|顺便|还要|还得|并且))/g,
+      "。",
+    )
+    .replace(
+      /(?<=[^。\n])(?=(去|做|把|确认|跟进|整理|拍摄|约拍|剪辑|理货|选题|直播|对货|复盘))/g,
+      "。",
+    );
 }
 
 function cleanLeadingConnector(text: string) {
@@ -77,22 +87,10 @@ function isTimeOnlyMarker(marker: string) {
 
 function shouldSplitAtMarker(prefix: string, marker: string) {
   const normalizedPrefix = cleanLeadingConnector(prefix.trim());
-  if (!normalizedPrefix || normalizedPrefix.length < 2) {
-    return false;
-  }
-
-  if (!ACTION_CUE_PATTERN.test(normalizedPrefix)) {
-    return false;
-  }
-
-  if (isExplicitDayMarker(marker)) {
-    return normalizedPrefix.length >= 4;
-  }
-
-  if (isTimeOnlyMarker(marker)) {
-    return normalizedPrefix.length >= 4;
-  }
-
+  if (!normalizedPrefix || normalizedPrefix.length < 2) return false;
+  if (!ACTION_CUE_PATTERN.test(normalizedPrefix)) return false;
+  if (isExplicitDayMarker(marker)) return normalizedPrefix.length >= 4;
+  if (isTimeOnlyMarker(marker)) return normalizedPrefix.length >= 4;
   return false;
 }
 
@@ -106,16 +104,13 @@ function splitEmbeddedSegments(segment: string) {
 
     const marker = match[0];
     const prefix = segment.slice(cursor, index);
-    if (!shouldSplitAtMarker(prefix, marker)) {
-      continue;
-    }
+    if (!shouldSplitAtMarker(prefix, marker)) continue;
 
     parts.push(segment.slice(cursor, index).trim());
     cursor = index;
   }
 
   parts.push(segment.slice(cursor).trim());
-
   return parts.filter(Boolean);
 }
 
@@ -128,20 +123,20 @@ function splitSegments(input: string) {
 }
 
 function inferTaskType(text: string): TaskType {
-  if (/摄影|拍摄|补拍|出镜/.test(text)) return "SHOOTING";
-  if (/对货|库存|货盘|补货/.test(text)) return "STOCK";
+  if (/摄影|拍摄|补拍|出镜|素材/.test(text)) return "SHOOTING";
+  if (/对货|库存|盘货|理货|到样|到货/.test(text)) return "STOCK";
   if (/直播|主播|口播/.test(text)) return "LIVE";
-  if (/学习|复盘模板|拆解/.test(text)) return "LEARNING";
+  if (/学习|拆解|模板/.test(text)) return "LEARNING";
   if (/数据|复盘|成交|停留|转化/.test(text)) return "DATA";
   if (/竞品|同行|账号/.test(text)) return "COMPETITOR";
-  if (/热点|热词|选题池|联想词/.test(text)) return "HOTTOPIC";
+  if (/热点|热词|选题池|趋势/.test(text)) return "HOTTOPIC";
   return "CONTENT";
 }
 
 function inferTaskPriority(text: string): TaskPriority {
-  if (/先|重点|必须|确认/.test(text)) return "CRITICAL";
-  if (/今天|今晚|明天|下午|晚上|\d{1,2}点/.test(text)) return "HIGH";
-  if (/整理|汇总|学习/.test(text)) return "MEDIUM";
+  if (/必须|立刻|今晚|今天|确认|紧急/.test(text)) return "CRITICAL";
+  if (/明天|下午|晚上|约拍|拍摄|交给剪辑/.test(text)) return "HIGH";
+  if (/整理|复盘|补充|理货/.test(text)) return "MEDIUM";
   return "MEDIUM";
 }
 
@@ -149,13 +144,8 @@ function getOffsetToWeekday(targetWeekday: number, now: Date, forceNextWeek = fa
   const currentWeekday = getDay(now);
   let offset = targetWeekday - currentWeekday;
 
-  if (offset < 0) {
-    offset += 7;
-  }
-
-  if (forceNextWeek || offset === 0) {
-    offset += 7;
-  }
+  if (offset < 0) offset += 7;
+  if (forceNextWeek || offset === 0) offset += 7;
 
   return offset;
 }
@@ -193,13 +183,11 @@ function getNextFollowUpMinutes(previous?: TemporalContext | null) {
 }
 
 function resolveExactTimeMinutes(text: string) {
-  const timeMatch = text.match(/(\d{1,2})(?:[:：\.点时])(?:(\d{1,2})|半)?(?:分)?/);
-  if (!timeMatch) {
-    return null;
-  }
+  const timeMatch = text.match(/(\d{1,2})(?:[:：.](\d{1,2})|点|时)?(半)?/);
+  if (!timeMatch) return null;
 
   let hour = Number(timeMatch[1]);
-  const minute = timeMatch[0].includes("半") ? 30 : timeMatch[2] ? Number(timeMatch[2]) : 0;
+  const minute = timeMatch[3] ? 30 : timeMatch[2] ? Number(timeMatch[2]) : 0;
 
   if (/下午|晚上|今晚|明晚/.test(text) && hour < 12) hour += 12;
   if (/中午/.test(text) && hour < 11) hour += 12;
@@ -209,9 +197,7 @@ function resolveExactTimeMinutes(text: string) {
 
 function inferDefaultTimeMinutes(text: string, previous?: TemporalContext | null) {
   const exactTime = resolveExactTimeMinutes(text);
-  if (exactTime != null) {
-    return exactTime;
-  }
+  if (exactTime != null) return exactTime;
 
   if (/早上|上午|明早/.test(text)) return 10 * 60;
   if (/中午/.test(text)) return 12 * 60;
@@ -219,12 +205,10 @@ function inferDefaultTimeMinutes(text: string, previous?: TemporalContext | null
   if (/晚上|今晚|明晚/.test(text)) return 18 * 60;
 
   const followUpTime = getNextFollowUpMinutes(previous);
-  if (followUpTime != null) {
-    return followUpTime;
-  }
+  if (followUpTime != null) return followUpTime;
 
   if (/发布|发出|上线|上架/.test(text)) return 15 * 60;
-  if (/直播|主播|搭配|拍摄|补拍/.test(text)) return 15 * 60;
+  if (/直播|主播|搭配|拍摄|约拍/.test(text)) return 15 * 60;
   if (/脚本|文案|标题|封面|对货|库存|整理|确认|复盘/.test(text)) return 10 * 60;
 
   return null;
@@ -281,18 +265,18 @@ function cleanTaskTitle(segment: string) {
 
   const removablePatterns = [
     /^(今天|今晚|明天|后天|下周[一二三四五六日天]?|本周[一二三四五六日天]?|周[一二三四五六日天]|星期[一二三四五六日天]|明早|明晚|早上|上午|中午|下午|晚上)/,
-    /^(?:\d{1,2}(?:[:：\.点时](?:\d{1,2}|半)?(?:分)?)?)/,
-    /^(先|再|然后|接着|最后|顺便|另外|还要|还得|需要|安排|准备|做|出|写|补|去|把|和)/,
+    /^(?:\d{1,2}(?:[:：.]\d{1,2}|点|时)?(?:半)?)/,
+    /^(先|然后|接着|最后|顺便|另外|还要|还得|需要|安排|准备|去|做|把)/,
   ];
 
-  let hasChanges = true;
-  while (hasChanges) {
-    hasChanges = false;
+  let changed = true;
+  while (changed) {
+    changed = false;
     for (const pattern of removablePatterns) {
       const next = cleaned.replace(pattern, "").trim();
       if (next !== cleaned) {
         cleaned = next;
-        hasChanges = true;
+        changed = true;
       }
     }
   }
@@ -315,7 +299,7 @@ export function suggestTasksFromText(input: string): TaskSuggestion[] {
 }
 
 function isContentPlanningSegment(text: string) {
-  return /(预告|脚本|图文|短视频|视频|笔记|直播|穿搭|种草|选题|发布|上新|封面|标题)/.test(
+  return /(预告|脚本|图文|短视频|视频|笔记|直播|穿搭|种草|选题|发布|上新|封面|标题|拍摄|剪辑)/.test(
     text,
   );
 }
@@ -323,8 +307,8 @@ function isContentPlanningSegment(text: string) {
 function inferContentType(text: string): ContentType {
   if (/图文|笔记/.test(text)) return "CAROUSEL";
   if (/短视频|口播|视频/.test(text)) return "SHORT_VIDEO";
-  if (/穿搭/.test(text)) return "OUTFIT";
-  if (/种草/.test(text)) return "SEEDING";
+  if (/穿搭|look|搭配/.test(text)) return "OUTFIT";
+  if (/种草|卖点|款式/.test(text)) return "SEEDING";
   return "LIVE_TRAILER";
 }
 
@@ -337,10 +321,23 @@ function inferContentStatus(text: string): ContentStatus {
   return "IDEA";
 }
 
+function inferWorkflowStage(text: string): ContentWorkflowStage {
+  if (/上线|发布|发出|复盘|数据/.test(text)) return "DONE";
+  if (/剪辑|剪片|剪出|给剪辑/.test(text)) return "EDIT";
+  if (/素材|整理素材|选片/.test(text)) return "ASSETS";
+  if (/拍摄结束|已拍|补拍完成/.test(text)) return "SHOT";
+  if (/约拍|排期|摄影|时间/.test(text)) return "BOOKING";
+  if (/脚本|口播|镜头|文案|标题|封面/.test(text)) return "SCRIPT";
+  if (/理货|盘货|到样|库存|到货/.test(text)) return "INVENTORY";
+  if (/商务|选品|对接|主播/.test(text)) return "BUSINESS";
+  return "TOPIC";
+}
+
 function inferAudience(text: string) {
   if (/面试/.test(text)) return "面试女生";
   if (/通勤/.test(text)) return "通勤女生";
   if (/直播/.test(text)) return "直播间新客";
+  if (/小个子/.test(text)) return "小个子女生";
   return "待补充";
 }
 
@@ -354,10 +351,7 @@ function inferScenario(text: string) {
 }
 
 function cleanContentTitle(segment: string) {
-  const cleaned = cleanTaskTitle(segment)
-    .replace(/(一下|一版|一个|一条)$/g, "")
-    .trim();
-
+  const cleaned = cleanTaskTitle(segment).replace(/(一条|一篇|一个|一组)$/, "").trim();
   return cleaned || segment.trim();
 }
 
@@ -382,8 +376,18 @@ function buildContentSuggestion(segment: string, dueAt: string | null): ContentP
     script: /脚本|文案|标题|封面/.test(segment) ? segment.trim() : "待补充",
     publishAt: dueAt,
     status,
+    workflowStage: inferWorkflowStage(segment),
     calendarLabel,
     dataNote: inferContentDataNote(segment),
+    selectionNotes: /选品|主播/.test(segment) ? segment.trim() : null,
+    businessNotes: /商务|对接/.test(segment) ? segment.trim() : null,
+    inventoryNotes: /理货|盘货|库存|到样|到货/.test(segment) ? segment.trim() : null,
+    shootDate: /约拍|拍摄|摄影/.test(segment) ? dueAt : null,
+    stylingNotes: /穿搭|look|搭配/.test(segment) ? segment.trim() : null,
+    cameraNotes: /镜头/.test(segment) ? segment.trim() : null,
+    voiceoverNotes: /口播|语音/.test(segment) ? segment.trim() : null,
+    assetNotes: /素材|选片/.test(segment) ? segment.trim() : null,
+    editBrief: /剪辑|剪片/.test(segment) ? segment.trim() : null,
   };
 }
 
@@ -404,12 +408,12 @@ function inferTheme(input: string) {
 export function generateReportFromInput(input: string): GeneratedReport {
   const theme = inferTheme(input);
   const segments = splitSegments(input);
-  const tomorrowItems = segments.filter((segment) => /明天|明日|下周|待|要|计划/.test(segment));
+  const tomorrowItems = segments.filter((segment) => /明天|明日|下周|计划/.test(segment));
   const completedItems = segments.filter((segment) => !tomorrowItems.includes(segment));
 
   const completedText =
     completedItems.length > 0
-      ? `今日完成：${completedItems.map((item) => `已推进${item.replace(/今天/, "")}`).join("；")}。`
+      ? `今日完成：${completedItems.map((item) => `已推进 ${item.replace(/今天/, "")}`).join("；")}。`
       : "今日完成：已完成日常内容推进与协同跟进。";
   const tomorrowText =
     tomorrowItems.length > 0
@@ -419,8 +423,8 @@ export function generateReportFromInput(input: string): GeneratedReport {
   const dailyReport = `${completedText}\n${tomorrowText}`;
   const weeklyDraft =
     `本周围绕${theme}持续推进内容选题、执行协同与结果复盘，` +
-    `${completedItems.length > 0 ? `已完成${completedItems.length}项关键动作，` : ""}` +
-    `${tomorrowItems.length > 0 ? `下一步重点为${tomorrowItems.join("、")}。` : "下一步重点放在直播预热和内容转化。"}`
+    `${completedItems.length > 0 ? `已完成 ${completedItems.length} 项关键动作，` : ""}` +
+    `${tomorrowItems.length > 0 ? `下一步重点为 ${tomorrowItems.join("、")}。` : "下一步重点放在直播预热和内容转化。"}`
       .replace(/明天|明日/g, "");
 
   const emailSubject = `【日报】${theme}工作推进情况`;
@@ -438,28 +442,120 @@ export function generateReportFromInput(input: string): GeneratedReport {
   };
 }
 
+function inferRadarTopicType(text: string): TopicType {
+  if (/通勤|面试|直播间|节前|节后|穿搭场景/.test(text)) return "SCENE";
+  if (/松弛感|精致感|显瘦|氛围感|情绪/.test(text)) return "EMOTION";
+  if (/小个子|梨形|学生|毕业生|上班族|新客|女生/.test(text)) return "AUDIENCE";
+  return "TREND";
+}
+
+function inferRadarContentType(text: string): ContentType {
+  if (/图文|清单|合集/.test(text)) return "CAROUSEL";
+  if (/口播|短视频|视频/.test(text)) return "SHORT_VIDEO";
+  if (/穿搭|look|搭配/.test(text)) return "OUTFIT";
+  if (/直播|预告/.test(text)) return "LIVE_TRAILER";
+  return "SEEDING";
+}
+
+function cleanTopicLine(line: string) {
+  return line
+    .replace(/^[\s\-*•·]+/, "")
+    .replace(/^\d+[.)、]\s*/, "")
+    .replace(/^(Top|TOP)\s*\d+\s*/i, "")
+    .trim();
+}
+
+function splitTopicLines(input: string) {
+  return normalizeText(input)
+    .split(/\n|。|；|;/)
+    .map(cleanTopicLine)
+    .filter((line) => line.length >= 2 && line.length <= 40);
+}
+
+function inferTopicDirection(keyword: string) {
+  if (/面试/.test(keyword)) return "适合转成面试穿搭直播预告、避雷图文和口播脚本。";
+  if (/通勤/.test(keyword)) return "适合转成通勤 look 拍摄脚本和短视频标题。";
+  if (/直播/.test(keyword)) return "适合直接做直播预告和直播间口播重点。";
+  if (/小个子|梨形|显瘦/.test(keyword)) return "适合做身材问题切口的脚本和剪辑提纲。";
+  return "适合先进入选题池，再拆成图文、短视频或直播预告。";
+}
+
+function inferTopicContentTitle(keyword: string) {
+  if (/直播/.test(keyword)) return `${keyword}的预告选题`;
+  if (/面试|通勤/.test(keyword)) return `${keyword}怎么拍成可执行内容`;
+  return `${keyword}切成一条可拍的内容选题`;
+}
+
+function inferHeatScore(keyword: string, index: number) {
+  let score = 60 - index * 3;
+  if (/直播|面试|通勤|毕业/.test(keyword)) score += 15;
+  if (/显瘦|小个子|梨形|松弛感/.test(keyword)) score += 10;
+  return Math.max(35, Math.min(score, 95));
+}
+
+export function suggestHotTopicsFromText(
+  input: string,
+  sourceHint = "AI 热点雷达",
+): HotTopicSuggestion[] {
+  const keywords = [...new Set(splitTopicLines(input))].slice(0, 10);
+
+  return keywords.map((keyword, index) => ({
+    keyword,
+    type: inferRadarTopicType(keyword),
+    source: sourceHint || "AI 热点雷达",
+    usableDirection: inferTopicDirection(keyword),
+    contentTitle: inferTopicContentTitle(keyword),
+    contentType: inferRadarContentType(keyword),
+    workflowStage: "TOPIC",
+    heatScore: inferHeatScore(keyword, index),
+  }));
+}
+
 export function generateContentSuggestion(topic: string): ContentSuggestion {
   const cleanedTopic = topic.trim() || "通勤穿搭";
   const audience = /面试/.test(cleanedTopic)
     ? "面试女生"
     : /毕业/.test(cleanedTopic)
       ? "毕业季新人"
-      : "通勤女生";
+      : /小个子/.test(cleanedTopic)
+        ? "小个子女生"
+        : "通勤女生";
 
   return {
     topic: cleanedTopic,
     titles: [
       `${cleanedTopic}别只说开播了，这样写预告更容易点进来`,
-      `${audience}今晚最该看的 3 个${cleanedTopic}看点`,
-      `如果要做${cleanedTopic}，开头钩子可以直接这样说`,
+      `${audience}今晚最该看的 3 个 ${cleanedTopic}看点`,
+      `如果要做 ${cleanedTopic}，开头钩子可以直接这样说`,
     ],
-    hook: `先用一句用户最常见的纠结开场，比如“${audience}最怕${cleanedTopic}看起来太用力？”`,
+    hook: `先用一句用户最常见的纠结开场，比如“${audience}做 ${cleanedTopic} 时最怕看起来太用力怎么办？”`,
     sellingPoints: [
       "先给明确场景，让用户知道为什么现在要看。",
       "中段直接拆穿搭公式或直播看点，不要空喊福利。",
       "结尾给评论互动口令，方便拉高互动和二次跟进。",
     ],
     cta: `结尾引导可以用：“评论区打‘${cleanedTopic.slice(0, 2)}’，我把搭配重点继续展开。”`,
+    stylingNotes: [
+      "先定 3 套主推 look，每套都对应一个真实场景。",
+      "把颜色、版型、鞋包顺序写死，避免现场临时改。",
+      "主推款、替代款、尺码提醒都要提前放进脚本。",
+    ],
+    shotSequence: [
+      "镜头 1：3 秒痛点开场，先说用户最怕踩的坑。",
+      "镜头 2：上身前后对比，给出第一套 look 的核心卖点。",
+      "镜头 3：切第二、第三套 look，补充细节镜头和动作镜头。",
+      "镜头 4：结尾做评论引导和直播间承接。",
+    ],
+    voiceoverLines: [
+      `这套 ${cleanedTopic} 不是单纯好看，是上镜和日常都能穿。`,
+      "如果你担心显胖、显学生气或者不够精神，这里直接帮你避掉。",
+      "我会把每套 look 的搭配重点和替换方案都讲清楚。",
+    ],
+    editFlow: [
+      "前 2 秒先给结果或对比，保证用户停留。",
+      "中间节奏按“问题-解决-细节”剪，不要把动作镜头全堆一起。",
+      "字幕重点放版型、场景、适合人群和评论区口令。",
+    ],
   };
 }
 

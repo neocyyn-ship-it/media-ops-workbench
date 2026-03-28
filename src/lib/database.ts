@@ -89,8 +89,18 @@ function initSchema(db: Database.Database) {
       script TEXT NOT NULL,
       publish_at TEXT,
       status TEXT NOT NULL,
+      workflow_stage TEXT NOT NULL DEFAULT 'TOPIC',
       calendar_label TEXT,
       data_note TEXT,
+      selection_notes TEXT,
+      business_notes TEXT,
+      inventory_notes TEXT,
+      shoot_date TEXT,
+      styling_notes TEXT,
+      camera_notes TEXT,
+      voiceover_notes TEXT,
+      asset_notes TEXT,
+      edit_brief TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -147,6 +157,16 @@ function initSchema(db: Database.Database) {
   `);
 
   ensureColumn(db, "content_plans", "calendar_label", "TEXT");
+  ensureColumn(db, "content_plans", "workflow_stage", "TEXT NOT NULL DEFAULT 'TOPIC'");
+  ensureColumn(db, "content_plans", "selection_notes", "TEXT");
+  ensureColumn(db, "content_plans", "business_notes", "TEXT");
+  ensureColumn(db, "content_plans", "inventory_notes", "TEXT");
+  ensureColumn(db, "content_plans", "shoot_date", "TEXT");
+  ensureColumn(db, "content_plans", "styling_notes", "TEXT");
+  ensureColumn(db, "content_plans", "camera_notes", "TEXT");
+  ensureColumn(db, "content_plans", "voiceover_notes", "TEXT");
+  ensureColumn(db, "content_plans", "asset_notes", "TEXT");
+  ensureColumn(db, "content_plans", "edit_brief", "TEXT");
 }
 
 function seedDatabase(db: Database.Database) {

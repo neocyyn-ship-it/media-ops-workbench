@@ -40,6 +40,17 @@ export const CONTENT_STATUSES = [
   "PUBLISHED",
   "REVIEWED",
 ] as const;
+export const CONTENT_WORKFLOW_STAGES = [
+  "TOPIC",
+  "BUSINESS",
+  "INVENTORY",
+  "SCRIPT",
+  "BOOKING",
+  "SHOT",
+  "ASSETS",
+  "EDIT",
+  "DONE",
+] as const;
 export const CALENDAR_LABELS = [
   "CAMPAIGN",
   "PRODUCTION",
@@ -71,6 +82,7 @@ export type TaskCadence = (typeof TASK_CADENCES)[number];
 export type WorkspaceProgress = (typeof WORKSPACE_PROGRESS)[number];
 export type ContentType = (typeof CONTENT_TYPES)[number];
 export type ContentStatus = (typeof CONTENT_STATUSES)[number];
+export type ContentWorkflowStage = (typeof CONTENT_WORKFLOW_STAGES)[number];
 export type CalendarLabel = (typeof CALENDAR_LABELS)[number];
 export type InspirationType = (typeof INSPIRATION_TYPES)[number];
 export type Platform = (typeof PLATFORMS)[number];
@@ -118,8 +130,18 @@ export interface ContentPlanRecord {
   script: string;
   publishAt: string | null;
   status: ContentStatus;
+  workflowStage: ContentWorkflowStage;
   calendarLabel: CalendarLabel | null;
   dataNote: string | null;
+  selectionNotes: string | null;
+  businessNotes: string | null;
+  inventoryNotes: string | null;
+  shootDate: string | null;
+  stylingNotes: string | null;
+  cameraNotes: string | null;
+  voiceoverNotes: string | null;
+  assetNotes: string | null;
+  editBrief: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -207,6 +229,10 @@ export interface ContentSuggestion {
   hook: string;
   sellingPoints: string[];
   cta: string;
+  stylingNotes: string[];
+  shotSequence: string[];
+  voiceoverLines: string[];
+  editFlow: string[];
 }
 
 export interface ContentPlanSuggestion {
@@ -218,8 +244,29 @@ export interface ContentPlanSuggestion {
   script?: string;
   publishAt: string | null;
   status: ContentStatus;
+  workflowStage: ContentWorkflowStage;
   calendarLabel: CalendarLabel | null;
   dataNote?: string | null;
+  selectionNotes?: string | null;
+  businessNotes?: string | null;
+  inventoryNotes?: string | null;
+  shootDate?: string | null;
+  stylingNotes?: string | null;
+  cameraNotes?: string | null;
+  voiceoverNotes?: string | null;
+  assetNotes?: string | null;
+  editBrief?: string | null;
+}
+
+export interface HotTopicSuggestion {
+  keyword: string;
+  type: TopicType;
+  source: string;
+  usableDirection: string;
+  contentTitle: string;
+  contentType: ContentType;
+  workflowStage: ContentWorkflowStage;
+  heatScore: number;
 }
 
 export interface HolidayMarker {

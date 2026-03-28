@@ -2,6 +2,7 @@ import type {
   CalendarLabel,
   ContentStatus,
   ContentType,
+  ContentWorkflowStage,
   InspirationType,
   Platform,
   TaskCadence,
@@ -15,6 +16,7 @@ import {
   CALENDAR_LABELS,
   CONTENT_STATUSES,
   CONTENT_TYPES,
+  CONTENT_WORKFLOW_STAGES,
   INSPIRATION_TYPES,
   PLATFORMS,
   TASK_CADENCES,
@@ -84,6 +86,18 @@ export const CONTENT_STATUS_LABELS: Record<ContentStatus, string> = {
   REVIEWED: "已复盘",
 };
 
+export const CONTENT_WORKFLOW_STAGE_LABELS: Record<ContentWorkflowStage, string> = {
+  TOPIC: "选题锁定",
+  BUSINESS: "选品商务",
+  INVENTORY: "到样理货",
+  SCRIPT: "拍摄脚本",
+  BOOKING: "约拍确认",
+  SHOT: "已拍待整",
+  ASSETS: "素材整理",
+  EDIT: "交付剪辑",
+  DONE: "上线复盘",
+};
+
 export const CALENDAR_LABEL_LABELS: Record<CalendarLabel, string> = {
   CAMPAIGN: "直播预热",
   PRODUCTION: "拍摄制作",
@@ -142,6 +156,10 @@ export const WORKSPACE_PROGRESS_OPTIONS = buildOptions(
 );
 export const CONTENT_TYPE_OPTIONS = buildOptions(CONTENT_TYPES, CONTENT_TYPE_LABELS);
 export const CONTENT_STATUS_OPTIONS = buildOptions(CONTENT_STATUSES, CONTENT_STATUS_LABELS);
+export const CONTENT_WORKFLOW_STAGE_OPTIONS = buildOptions(
+  CONTENT_WORKFLOW_STAGES,
+  CONTENT_WORKFLOW_STAGE_LABELS,
+);
 export const CALENDAR_LABEL_OPTIONS = buildOptions(CALENDAR_LABELS, CALENDAR_LABEL_LABELS);
 export const INSPIRATION_TYPE_OPTIONS = buildOptions(
   INSPIRATION_TYPES,

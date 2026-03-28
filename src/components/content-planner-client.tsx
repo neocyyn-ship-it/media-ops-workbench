@@ -62,13 +62,17 @@ import {
   CONTENT_STATUS_OPTIONS,
   CONTENT_TYPE_LABELS,
   CONTENT_TYPE_OPTIONS,
+  CONTENT_WORKFLOW_STAGE_LABELS,
+  CONTENT_WORKFLOW_STAGE_OPTIONS,
 } from "@/lib/options";
+import { workflowStageTone } from "@/lib/presentation";
 import type {
   CalendarLabel,
   ContentPlanRecord,
   ContentStatus,
   ContentSuggestion,
   ContentType,
+  ContentWorkflowStage,
   HolidayMarker,
   PlannerView,
 } from "@/lib/types";
@@ -82,8 +86,18 @@ const initialForm = {
   script: "",
   publishAt: "",
   status: "IDEA" as ContentStatus,
+  workflowStage: "TOPIC" as ContentWorkflowStage,
   calendarLabel: "CAMPAIGN" as CalendarLabel,
   dataNote: "",
+  selectionNotes: "",
+  businessNotes: "",
+  inventoryNotes: "",
+  shootDate: "",
+  stylingNotes: "",
+  cameraNotes: "",
+  voiceoverNotes: "",
+  assetNotes: "",
+  editBrief: "",
 };
 
 const plannerViews: Array<{ value: PlannerView; label: string }> = [
@@ -690,6 +704,22 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
   const selectedHoliday = getHolidayMarker(selectedDateKey, holidaysByDate);
   const selectedWarmup = getWarmupMarker(selectedDateKey, warmupByDate);
   const legendEntries = buildCalendarLegend();
+  const workflowOverview = useMemo(
+    () =>
+      CONTENT_WORKFLOW_STAGE_OPTIONS.map((option) => ({
+        ...option,
+        count: plans.filter((plan) => plan.workflowStage === option.value).length,
+      })),
+    [plans],
+  );
+
+  function serializeForm() {
+    return {
+      ...form,
+      publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : null,
+      shootDate: form.shootDate ? new Date(form.shootDate).toISOString() : null,
+    };
+  }
 
   async function createPlan() {
     try {
@@ -700,10 +730,7 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
 
       const created = await fetchJson<ContentPlanRecord>("/api/content", {
         method: "POST",
-        body: JSON.stringify({
-          ...form,
-          publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : null,
-        }),
+        body: JSON.stringify(serializeForm()),
       });
 
       setPlans((current) => [...current, created]);
@@ -733,10 +760,7 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
 
       const updated = await fetchJson<ContentPlanRecord>(`/api/content/${editingPlanId}`, {
         method: "PATCH",
-        body: JSON.stringify({
-          ...form,
-          publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : null,
-        }),
+        body: JSON.stringify(serializeForm()),
       });
 
       setPlans((current) => current.map((plan) => (plan.id === editingPlanId ? updated : plan)));
@@ -764,6 +788,22 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "生成内容建议失败。");
     }
+  }
+
+  function applySuggestionToForm() {
+    if (!suggestion) return;
+
+    setForm((current) => ({
+      ...current,
+      title: current.title || suggestion.titles[0] || suggestion.topic,
+      script: [suggestion.hook, ...suggestion.sellingPoints].join("\n"),
+      workflowStage: "SCRIPT",
+      stylingNotes: suggestion.stylingNotes.join("\n"),
+      cameraNotes: suggestion.shotSequence.join("\n"),
+      voiceoverNotes: suggestion.voiceoverLines.join("\n"),
+      editBrief: suggestion.editFlow.join("\n"),
+    }));
+    setMessage("已把 AI 建议带入拍摄 SOP 表单。");
   }
 
   async function movePlanToDate(date: Date, event?: DragEvent<HTMLDivElement>) {
@@ -809,8 +849,18 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
       script: plan.script,
       publishAt: toDatetimeLocalValue(plan.publishAt),
       status: plan.status,
+      workflowStage: plan.workflowStage,
       calendarLabel: resolveCalendarLabel(plan),
       dataNote: plan.dataNote ?? "",
+      selectionNotes: plan.selectionNotes ?? "",
+      businessNotes: plan.businessNotes ?? "",
+      inventoryNotes: plan.inventoryNotes ?? "",
+      shootDate: toDatetimeLocalValue(plan.shootDate),
+      stylingNotes: plan.stylingNotes ?? "",
+      cameraNotes: plan.cameraNotes ?? "",
+      voiceoverNotes: plan.voiceoverNotes ?? "",
+      assetNotes: plan.assetNotes ?? "",
+      editBrief: plan.editBrief ?? "",
     });
     setMessage(`正在编辑「${plan.title}」`);
   }
@@ -975,6 +1025,16 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
           </div>
         ) : null}
 
+        <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+          {workflowOverview.map((stage) => (
+            <div key={stage.value} className="panel-soft p-3">
+              <Badge tone={workflowStageTone(stage.value)}>{CONTENT_WORKFLOW_STAGE_LABELS[stage.value]}</Badge>
+              <div className="mt-3 text-2xl font-semibold">{stage.count}</div>
+              <div className="mt-1 text-xs muted-text">当前处于这个 SOP 阶段的内容数</div>
+            </div>
+          ))}
+        </div>
+
         <div className="mt-5 overflow-x-auto">
           {view === "month" ? (
             <MonthCalendar
@@ -1066,6 +1126,9 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
                           </span>
                           <Badge>{CONTENT_TYPE_LABELS[plan.contentType]}</Badge>
                           <Badge tone="accent">{CONTENT_STATUS_LABELS[plan.status]}</Badge>
+                          <Badge tone={workflowStageTone(plan.workflowStage)}>
+                            {CONTENT_WORKFLOW_STAGE_LABELS[plan.workflowStage]}
+                          </Badge>
                         </div>
                         <div className="mt-3 text-lg font-semibold">{plan.title}</div>
                       </div>
@@ -1085,6 +1148,86 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
                         <Trash2 className="h-4 w-4" />
                         删除
                       </button>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      <div className="rounded-2xl bg-white/80 px-4 py-3">
+                        <div className="text-xs font-medium uppercase tracking-[0.16em] muted-text">
+                          {"SOP"}
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-slate-700">
+                          {CONTENT_WORKFLOW_STAGE_LABELS[plan.workflowStage]}
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-slate-700">
+                          {plan.shootDate
+                            ? `\u62cd\u6444\u65f6\u95f4\uff1a${formatDateTime(plan.shootDate)}`
+                            : "\u62cd\u6444\u65f6\u95f4\uff1a\u5f85\u5b9a"}
+                        </p>
+                      </div>
+                      {plan.selectionNotes ? (
+                        <div className="rounded-2xl bg-white/80 px-4 py-3">
+                          <div className="text-xs font-medium uppercase tracking-[0.16em] muted-text">
+                            {"\u9009\u54c1\u5907\u6ce8"}
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">{plan.selectionNotes}</p>
+                        </div>
+                      ) : null}
+                      {plan.businessNotes ? (
+                        <div className="rounded-2xl bg-white/80 px-4 py-3">
+                          <div className="text-xs font-medium uppercase tracking-[0.16em] muted-text">
+                            {"\u5546\u52a1\u8ddf\u8fdb"}
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">{plan.businessNotes}</p>
+                        </div>
+                      ) : null}
+                      {plan.inventoryNotes ? (
+                        <div className="rounded-2xl bg-white/80 px-4 py-3">
+                          <div className="text-xs font-medium uppercase tracking-[0.16em] muted-text">
+                            {"\u7406\u8d27\u76d8\u70b9"}
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">{plan.inventoryNotes}</p>
+                        </div>
+                      ) : null}
+                      {plan.stylingNotes ? (
+                        <div className="rounded-2xl bg-white/80 px-4 py-3">
+                          <div className="text-xs font-medium uppercase tracking-[0.16em] muted-text">
+                            {"\u7a7f\u642d\u642d\u914d"}
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">{plan.stylingNotes}</p>
+                        </div>
+                      ) : null}
+                      {plan.cameraNotes ? (
+                        <div className="rounded-2xl bg-white/80 px-4 py-3">
+                          <div className="text-xs font-medium uppercase tracking-[0.16em] muted-text">
+                            {"\u955c\u5934\u8bbe\u8ba1"}
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">{plan.cameraNotes}</p>
+                        </div>
+                      ) : null}
+                      {plan.voiceoverNotes ? (
+                        <div className="rounded-2xl bg-white/80 px-4 py-3">
+                          <div className="text-xs font-medium uppercase tracking-[0.16em] muted-text">
+                            {"\u53e3\u64ad\u8bed\u97f3"}
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">{plan.voiceoverNotes}</p>
+                        </div>
+                      ) : null}
+                      {plan.assetNotes ? (
+                        <div className="rounded-2xl bg-white/80 px-4 py-3">
+                          <div className="text-xs font-medium uppercase tracking-[0.16em] muted-text">
+                            {"\u7d20\u6750\u6574\u7406"}
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">{plan.assetNotes}</p>
+                        </div>
+                      ) : null}
+                      {plan.editBrief ? (
+                        <div className="rounded-2xl bg-white/80 px-4 py-3 md:col-span-2">
+                          <div className="text-xs font-medium uppercase tracking-[0.16em] muted-text">
+                            {"\u526a\u8f91\u811a\u672c"}
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">{plan.editBrief}</p>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="mt-4 grid gap-3 text-sm muted-text md:grid-cols-2">
@@ -1163,6 +1306,26 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
 
             <div>
               <label className="field-label">颜色标签</label>
+              <label className="field-label">SOP 阶段</label>
+              <select
+                value={form.workflowStage}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    workflowStage: event.target.value as ContentWorkflowStage,
+                  }))
+                }
+              >
+                {CONTENT_WORKFLOW_STAGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="field-label">棰滆壊鏍囩</label>
               <select
                 value={form.calendarLabel}
                 onChange={(event) =>
@@ -1252,6 +1415,146 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
             </div>
           </div>
 
+          <div className="mt-4 rounded-[28px] border bg-white/70 p-4 sm:p-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="tiny-label">SOP Workflow</div>
+                <h4 className="mt-2 text-lg font-semibold">{"\u62cd\u6444\u94fe\u8def\u4e00\u89c8"}</h4>
+              </div>
+              <Badge tone={workflowStageTone(form.workflowStage)}>
+                {CONTENT_WORKFLOW_STAGE_LABELS[form.workflowStage]}
+              </Badge>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="field-label">{"\u62cd\u6444\u65f6\u95f4"}</label>
+                <input
+                  type="datetime-local"
+                  value={form.shootDate}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, shootDate: event.target.value }))
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="field-label">{"SOP \u9636\u6bb5"}</label>
+                <select
+                  value={form.workflowStage}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      workflowStage: event.target.value as ContentWorkflowStage,
+                    }))
+                  }
+                >
+                  {CONTENT_WORKFLOW_STAGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="field-label">{"\u9009\u54c1\u5907\u6ce8"}</label>
+                <textarea
+                  className="min-h-24"
+                  value={form.selectionNotes}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, selectionNotes: event.target.value }))
+                  }
+                  placeholder={"\u8bb0\u5f55\u4e3b\u64ad\u9009\u54c1\u7ed3\u8bba\u3001\u5957\u88c5\u7ec4\u5408\u3001\u5bf9\u5e94\u9009\u9898\u7406\u7531"}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="field-label">{"\u5546\u52a1\u8ddf\u8fdb"}</label>
+                <textarea
+                  className="min-h-24"
+                  value={form.businessNotes}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, businessNotes: event.target.value }))
+                  }
+                  placeholder={"\u8bb0\u5f55\u8c08\u597d\u7684\u6b3e\u5f0f\u3001\u5230\u6837\u65f6\u95f4\u3001\u88c5\u7bb1\u60c5\u51b5\u3001\u9700\u8981\u50ac\u7684\u4eba"}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="field-label">{"\u7406\u8d27\u76d8\u70b9"}</label>
+                <textarea
+                  className="min-h-24"
+                  value={form.inventoryNotes}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, inventoryNotes: event.target.value }))
+                  }
+                  placeholder={"\u5230\u6837\u540e\u7684 SKU\u3001\u989c\u8272\u3001\u5c3a\u7801\u3001\u7f3a\u8d27\u6216\u8865\u62cd\u60c5\u51b5"}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="field-label">{"\u7a7f\u642d\u642d\u914d"}</label>
+                <textarea
+                  className="min-h-24"
+                  value={form.stylingNotes}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, stylingNotes: event.target.value }))
+                  }
+                  placeholder={"\u5199\u660e\u4e0a\u8eab\u642d\u914d\u3001\u5185\u642d\u3001\u978b\u5305\u3001\u914d\u9970\u548c\u4e3b\u63a8\u7a7f\u642d\u987a\u5e8f"}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="field-label">{"\u955c\u5934\u8bbe\u8ba1"}</label>
+                <textarea
+                  className="min-h-24"
+                  value={form.cameraNotes}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, cameraNotes: event.target.value }))
+                  }
+                  placeholder={"\u5206\u955c\u987a\u5e8f\u3001\u8fd1\u666f/\u5168\u8eab\u3001\u8f6c\u573a\u52a8\u4f5c\u3001\u9700\u8981\u62cd\u7684\u5c40\u90e8\u7ec6\u8282"}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="field-label">{"\u53e3\u64ad\u8bed\u97f3"}</label>
+                <textarea
+                  className="min-h-24"
+                  value={form.voiceoverNotes}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, voiceoverNotes: event.target.value }))
+                  }
+                  placeholder={"\u4e3b\u64ad\u53e3\u64ad\u8981\u70b9\u3001\u5c3a\u7801\u53c2\u8003\u3001\u9762\u6599\u611f\u53d7\u3001\u5356\u70b9\u8bed\u53e5"}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="field-label">{"\u7d20\u6750\u6574\u7406"}</label>
+                <textarea
+                  className="min-h-24"
+                  value={form.assetNotes}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, assetNotes: event.target.value }))
+                  }
+                  placeholder={"\u62cd\u5b8c\u540e\u9700\u8981\u6574\u7406\u7684\u673a\u4f4d\u3001\u547d\u540d\u89c4\u5219\u3001\u5c01\u9762\u5009\u3001B-roll \u8865\u5145"}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="field-label">{"\u526a\u8f91\u811a\u672c"}</label>
+                <textarea
+                  className="min-h-28"
+                  value={form.editBrief}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, editBrief: event.target.value }))
+                  }
+                  placeholder={"\u7ed9\u526a\u8f91\u7684\u8282\u594f\u8981\u6c42\u3001\u5148\u540e\u987a\u5e8f\u3001\u5361\u70b9\u3001\u5b57\u5e55\u548c\u7ed3\u5c3e CTA"}
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="mt-4 flex flex-wrap gap-3">
             <button type="button" className="button-primary" onClick={() => void savePlan()}>
               {editingPlanId ? "保存修改" : "加入日历"}
@@ -1306,6 +1609,48 @@ export function ContentPlannerClient({ initialPlans }: { initialPlans: ContentPl
                 </ul>
                 <p className="mt-3 text-sm leading-6 text-[color:var(--accent)]">{suggestion.cta}</p>
               </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="panel-soft p-4">
+                  <div className="font-medium">{"\u7a7f\u642d\u642d\u914d"}</div>
+                  <ul className="mt-3 space-y-2 text-sm leading-6 muted-text">
+                    {suggestion.stylingNotes.map((item) => (
+                      <li key={item}>- {item}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="panel-soft p-4">
+                  <div className="font-medium">{"\u955c\u5934\u8bbe\u8ba1"}</div>
+                  <ul className="mt-3 space-y-2 text-sm leading-6 muted-text">
+                    {suggestion.shotSequence.map((item) => (
+                      <li key={item}>- {item}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="panel-soft p-4">
+                  <div className="font-medium">{"\u53e3\u64ad\u8bed\u97f3"}</div>
+                  <ul className="mt-3 space-y-2 text-sm leading-6 muted-text">
+                    {suggestion.voiceoverLines.map((item) => (
+                      <li key={item}>- {item}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="panel-soft p-4">
+                  <div className="font-medium">{"\u526a\u8f91\u903b\u8f91"}</div>
+                  <ul className="mt-3 space-y-2 text-sm leading-6 muted-text">
+                    {suggestion.editFlow.map((item) => (
+                      <li key={item}>- {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              <button type="button" className="button-primary" onClick={applySuggestionToForm}>
+                {"\u5e26\u5165 SOP \u8868\u5355"}
+              </button>
             </div>
           ) : (
             <div className="mt-4 rounded-[24px] border border-dashed px-5 py-10 text-center text-sm muted-text">

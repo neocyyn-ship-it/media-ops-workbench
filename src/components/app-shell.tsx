@@ -11,6 +11,14 @@ import { cn } from "@/lib/utils";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
+  if (pathname === "/login") {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-[1600px] items-center justify-center px-4 py-6 sm:px-6 lg:px-8">
+        <main className="w-full max-w-xl">{children}</main>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex min-h-screen max-w-[1600px] gap-5 px-4 py-4 sm:px-6 lg:px-8">
       <aside className="panel sticky top-4 hidden h-[calc(100vh-2rem)] w-[260px] shrink-0 flex-col justify-between p-5 lg:flex">

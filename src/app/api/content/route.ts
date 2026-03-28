@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 
 import { isOneOf } from "@/lib/options";
 import { createContentPlan, listContentPlans } from "@/lib/repository";
-import { CALENDAR_LABELS, CONTENT_STATUSES, CONTENT_TYPES } from "@/lib/types";
+import {
+  CALENDAR_LABELS,
+  CONTENT_STATUSES,
+  CONTENT_TYPES,
+  CONTENT_WORKFLOW_STAGES,
+} from "@/lib/types";
 
 export function GET() {
   return NextResponse.json({ plans: listContentPlans() });
@@ -25,10 +30,22 @@ export async function POST(request: Request) {
     script: body.script?.trim() || "待补充",
     publishAt: body.publishAt || null,
     status: isOneOf(body.status, CONTENT_STATUSES) ? body.status : "IDEA",
+    workflowStage: isOneOf(body.workflowStage, CONTENT_WORKFLOW_STAGES)
+      ? body.workflowStage
+      : "TOPIC",
     calendarLabel: isOneOf(body.calendarLabel, CALENDAR_LABELS)
       ? body.calendarLabel
       : null,
     dataNote: body.dataNote?.trim() || null,
+    selectionNotes: body.selectionNotes?.trim() || null,
+    businessNotes: body.businessNotes?.trim() || null,
+    inventoryNotes: body.inventoryNotes?.trim() || null,
+    shootDate: body.shootDate || null,
+    stylingNotes: body.stylingNotes?.trim() || null,
+    cameraNotes: body.cameraNotes?.trim() || null,
+    voiceoverNotes: body.voiceoverNotes?.trim() || null,
+    assetNotes: body.assetNotes?.trim() || null,
+    editBrief: body.editBrief?.trim() || null,
   });
 
   return NextResponse.json(plan);
