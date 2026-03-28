@@ -65,7 +65,7 @@ function LoginPageContent() {
             autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder={"123"}
+            placeholder={"\u8bf7\u8f93\u5165\u8bbf\u95ee\u5bc6\u7801"}
           />
         </div>
 
