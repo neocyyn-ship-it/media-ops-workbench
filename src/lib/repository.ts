@@ -14,12 +14,16 @@ import type {
   DashboardSnapshot,
   HotTopicRecord,
   InspirationRecord,
+  WeeklyEngagementRecord,
   ReportDraftRecord,
   TaskCadence,
   TaskPriority,
   TaskRecord,
   TaskStatus,
   TaskType,
+  WeeklyEngagementRole,
+  WeeklyEngagementStatus,
+  WeeklyEngagementType,
   WorkspaceDayRecord,
   WorkspaceProgress,
 } from "@/lib/types";
@@ -139,6 +143,24 @@ const reportBaseSelect = `
   FROM report_drafts
 `;
 
+const weeklyEngagementBaseSelect = `
+  SELECT
+    id,
+    title,
+    type,
+    date,
+    time,
+    contact_name AS contactName,
+    contact_role AS contactRole,
+    note,
+    reference_links AS referenceLinks,
+    status,
+    remark,
+    created_at AS createdAt,
+    updated_at AS updatedAt
+  FROM weekly_engagements
+`;
+
 function mapTask(row: Row): TaskRecord {
   return {
     id: String(row.id),
@@ -249,6 +271,36 @@ function mapReportDraft(row: Row): ReportDraftRecord {
     emailSubject: String(row.emailSubject),
     emailBody: String(row.emailBody),
     createdAt: String(row.createdAt),
+  };
+}
+
+function mapWeeklyEngagement(row: Row): WeeklyEngagementRecord {
+  let referenceLinks: string[] = [];
+  if (row.referenceLinks) {
+    try {
+      const parsed = JSON.parse(String(row.referenceLinks));
+      if (Array.isArray(parsed)) {
+        referenceLinks = parsed.map((item) => String(item)).filter(Boolean);
+      }
+    } catch {
+      referenceLinks = [];
+    }
+  }
+
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    type: row.type as WeeklyEngagementType,
+    date: String(row.date),
+    time: row.time ? String(row.time) : null,
+    contactName: String(row.contactName),
+    contactRole: row.contactRole as WeeklyEngagementRole,
+    note: row.note ? String(row.note) : null,
+    referenceLinks,
+    status: row.status as WeeklyEngagementStatus,
+    remark: row.remark ? String(row.remark) : null,
+    createdAt: String(row.createdAt),
+    updatedAt: String(row.updatedAt),
   };
 }
 
@@ -934,6 +986,125 @@ export function saveReportDraft(input: {
   return mapReportDraft(row);
 }
 
+export function listWeeklyEngagements() {
+  const rows = getDb()
+    .prepare(`${weeklyEngagementBaseSelect} ORDER BY date ASC, time ASC, created_at DESC`)
+    .all() as Row[];
+  return rows.map(mapWeeklyEngagement);
+}
+
+export function getWeeklyEngagementById(id: string) {
+  const row = getDb()
+    .prepare(`${weeklyEngagementBaseSelect} WHERE id = ?`)
+    .get(id) as Row | undefined;
+  return row ? mapWeeklyEngagement(row) : null;
+}
+
+export function createWeeklyEngagement(input: {
+  title: string;
+  type: WeeklyEngagementType;
+  date: string;
+  time?: string | null;
+  contactName: string;
+  contactRole: WeeklyEngagementRole;
+  note?: string | null;
+  referenceLinks?: string[];
+  status?: WeeklyEngagementStatus;
+  remark?: string | null;
+}) {
+  const now = new Date().toISOString();
+  const record = {
+    id: randomUUID(),
+    title: input.title,
+    type: input.type,
+    date: input.date,
+    time: input.time ?? null,
+    contact_name: input.contactName,
+    contact_role: input.contactRole,
+    note: input.note ?? null,
+    reference_links: JSON.stringify(input.referenceLinks ?? []),
+    status: input.status ?? "PENDING",
+    remark: input.remark ?? null,
+    created_at: now,
+    updated_at: now,
+  };
+
+  getDb()
+    .prepare(`
+      INSERT INTO weekly_engagements (
+        id, title, type, date, time, contact_name, contact_role, note,
+        reference_links, status, remark, created_at, updated_at
+      ) VALUES (
+        @id, @title, @type, @date, @time, @contact_name, @contact_role, @note,
+        @reference_links, @status, @remark, @created_at, @updated_at
+      )
+    `)
+    .run(record);
+
+  return getWeeklyEngagementById(record.id)!;
+}
+
+export function updateWeeklyEngagement(
+  id: string,
+  patch: Partial<{
+    title: string;
+    type: WeeklyEngagementType;
+    date: string;
+    time: string | null;
+    contactName: string;
+    contactRole: WeeklyEngagementRole;
+    note: string | null;
+    referenceLinks: string[];
+    status: WeeklyEngagementStatus;
+    remark: string | null;
+  }>,
+) {
+  const updates: Record<string, string | number | null> = {};
+  if (patch.title !== undefined) updates.title = patch.title;
+  if (patch.type !== undefined) updates.type = patch.type;
+  if (patch.date !== undefined) updates.date = patch.date;
+  if (patch.time !== undefined) updates.time = patch.time;
+  if (patch.contactName !== undefined) updates.contact_name = patch.contactName;
+  if (patch.contactRole !== undefined) updates.contact_role = patch.contactRole;
+  if (patch.note !== undefined) updates.note = patch.note;
+  if (patch.referenceLinks !== undefined) updates.reference_links = JSON.stringify(patch.referenceLinks);
+  if (patch.status !== undefined) updates.status = patch.status;
+  if (patch.remark !== undefined) updates.remark = patch.remark;
+
+  const fields = Object.keys(updates);
+  if (fields.length === 0) {
+    return getWeeklyEngagementById(id);
+  }
+
+  updates.updated_at = new Date().toISOString();
+  updates.id = id;
+
+  const setClause = fields.map((field) => `${field} = @${field}`).concat("updated_at = @updated_at");
+  getDb()
+    .prepare(`UPDATE weekly_engagements SET ${setClause.join(", ")} WHERE id = @id`)
+    .run(updates);
+
+  return getWeeklyEngagementById(id);
+}
+
+export function deleteWeeklyEngagement(id: string) {
+  const record = getWeeklyEngagementById(id);
+  if (!record) return null;
+
+  getDb().prepare("DELETE FROM weekly_engagements WHERE id = ?").run(id);
+  return record;
+}
+
+export function listWeeklyEngagementsForWeek(date = new Date()) {
+  const weekInterval = getAppWeekInterval(date);
+  return listWeeklyEngagements().filter((item) =>
+    isWithinInterval(getAppDateFromKey(item.date), {
+      start: weekInterval.start,
+      end: weekInterval.end,
+    }),
+  );
+}
+
 export function getDashboardSnapshot(): DashboardSnapshot {
   const tasks = listTasks();
   const todayInterval = getAppDayInterval();
@@ -972,6 +1143,7 @@ export function getDashboardSnapshot(): DashboardSnapshot {
     focusTasks,
     todayTasks: todayTasks.sort(compareTasks),
     counts,
+    weeklyEngagements: listWeeklyEngagementsForWeek(),
     workspaceDay: getWorkspaceDay(),
     latestReport: listReportDrafts(1)[0] ?? null,
   };

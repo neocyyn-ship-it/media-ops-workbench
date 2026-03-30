@@ -74,6 +74,23 @@ export const PLATFORMS = [
   "WECHAT_VIDEO",
 ] as const;
 export const TOPIC_TYPES = ["SCENE", "EMOTION", "AUDIENCE", "TREND"] as const;
+export const WEEKLY_ENGAGEMENT_TYPES = [
+  "MEETING",
+  "SHOOTING",
+  "LIVE",
+  "STOCK",
+  "TRANSFER",
+  "OTHER",
+] as const;
+export const WEEKLY_ENGAGEMENT_ROLES = [
+  "PHOTOGRAPHER",
+  "HOST",
+  "BRAND",
+  "COLLEAGUE",
+  "MODEL",
+  "OTHER",
+] as const;
+export const WEEKLY_ENGAGEMENT_STATUSES = ["PENDING", "IN_PROGRESS", "DONE"] as const;
 
 export type TaskType = (typeof TASK_TYPES)[number];
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
@@ -87,6 +104,9 @@ export type CalendarLabel = (typeof CALENDAR_LABELS)[number];
 export type InspirationType = (typeof INSPIRATION_TYPES)[number];
 export type Platform = (typeof PLATFORMS)[number];
 export type TopicType = (typeof TOPIC_TYPES)[number];
+export type WeeklyEngagementType = (typeof WEEKLY_ENGAGEMENT_TYPES)[number];
+export type WeeklyEngagementRole = (typeof WEEKLY_ENGAGEMENT_ROLES)[number];
+export type WeeklyEngagementStatus = (typeof WEEKLY_ENGAGEMENT_STATUSES)[number];
 
 export type TaskView = "today" | "week" | "all";
 export type TopicWindow = "today" | "week" | "all";
@@ -192,6 +212,22 @@ export interface ReportDraftRecord {
   createdAt: string;
 }
 
+export interface WeeklyEngagementRecord {
+  id: string;
+  title: string;
+  type: WeeklyEngagementType;
+  date: string;
+  time: string | null;
+  contactName: string;
+  contactRole: WeeklyEngagementRole;
+  note: string | null;
+  referenceLinks: string[];
+  status: WeeklyEngagementStatus;
+  remark: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DashboardSnapshot {
   focusTasks: TaskRecord[];
   todayTasks: TaskRecord[];
@@ -201,6 +237,7 @@ export interface DashboardSnapshot {
     waiting: number;
     overdue: number;
   };
+  weeklyEngagements: WeeklyEngagementRecord[];
   workspaceDay: WorkspaceDayRecord;
   latestReport: ReportDraftRecord | null;
 }
