@@ -1,34 +1,19 @@
-﻿"use client";
+"use client";
 
-import {
-  CheckCheck,
-  ClipboardList,
-  Copy,
-  Pencil,
-  Plus,
-  Save,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { CheckCheck, ClipboardList, Copy, Save, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/badge";
 import { PageHeading } from "@/components/page-heading";
 import { SectionCard } from "@/components/section-card";
 import { VoiceInput } from "@/components/voice-input";
-import { getAppDateKey } from "@/lib/app-time";
+import { WeeklyEngagementsClient } from "@/components/weekly-engagements-client";
 import { fetchJson } from "@/lib/client-fetch";
 import {
   TASK_PRIORITY_LABELS,
   TASK_STATUS_LABELS,
   WORKSPACE_PROGRESS_LABELS,
   WORKSPACE_PROGRESS_OPTIONS,
-  WEEKLY_ENGAGEMENT_ROLE_LABELS,
-  WEEKLY_ENGAGEMENT_ROLE_OPTIONS,
-  WEEKLY_ENGAGEMENT_STATUS_LABELS,
-  WEEKLY_ENGAGEMENT_STATUS_OPTIONS,
-  WEEKLY_ENGAGEMENT_TYPE_LABELS,
-  WEEKLY_ENGAGEMENT_TYPE_OPTIONS,
 } from "@/lib/options";
 import { taskPriorityTone, taskStatusTone, workspaceTone } from "@/lib/presentation";
 import type {
@@ -36,13 +21,9 @@ import type {
   TaskRecord,
   TaskSuggestion,
   TaskStatus,
-  WeeklyEngagementRecord,
-  WeeklyEngagementRole,
-  WeeklyEngagementStatus,
-  WeeklyEngagementType,
   WorkspaceDayRecord,
 } from "@/lib/types";
-import { formatDateOnly, formatDateTime, isThisWeekIso, relativeDateLabel } from "@/lib/utils";
+import { formatDateTime, relativeDateLabel } from "@/lib/utils";
 
 function StatCard({
   label,
@@ -59,49 +40,15 @@ function StatCard({
   );
 }
 
-const initialEngagementForm = {
-  title: "",
-  type: "MEETING" as WeeklyEngagementType,
-  date: getAppDateKey(),
-  time: "",
-  contactName: "",
-  contactRole: "COLLEAGUE" as WeeklyEngagementRole,
-  note: "",
-  referenceLinksText: "",
-  status: "PENDING" as WeeklyEngagementStatus,
-  remark: "",
-};
-
-function formatEngagementSchedule(date: string, time?: string | null) {
-  const dayLabel = formatDateOnly(date);
-  if (!time) return dayLabel;
-  return dayLabel + " " + time;
-}
-
-function parseEngagementLinks(value: string) {
-  return value
-    .split(/[\n,锛孿s]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 export function DashboardClient({ initialSnapshot }: { initialSnapshot: DashboardSnapshot }) {
   const [focusTasks, setFocusTasks] = useState(initialSnapshot.focusTasks);
   const [todayTasks, setTodayTasks] = useState(initialSnapshot.todayTasks);
   const [workspaceDay, setWorkspaceDay] = useState(initialSnapshot.workspaceDay);
   const [latestReport] = useState(initialSnapshot.latestReport);
-  const [weeklyEngagements, setWeeklyEngagements] = useState(
-    initialSnapshot.weeklyEngagements,
-  );
   const [captureText, setCaptureText] = useState("");
   const [suggestions, setSuggestions] = useState<TaskSuggestion[]>([]);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [engagementForm, setEngagementForm] = useState(initialEngagementForm);
-  const [editingEngagementId, setEditingEngagementId] = useState<string | null>(null);
-  const [engagementTypeFilter, setEngagementTypeFilter] = useState<"ALL" | WeeklyEngagementType>("ALL");
-  const [engagementRoleFilter, setEngagementRoleFilter] = useState<"ALL" | WeeklyEngagementRole>("ALL");
-  const [engagementMessage, setEngagementMessage] = useState("");
 
   const counts = useMemo(
     () => ({
@@ -113,15 +60,6 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
     }),
     [todayTasks],
   );
-
-  const filteredEngagements = useMemo(() => {
-    return weeklyEngagements.filter((item) => {
-      if (!isThisWeekIso(item.date)) return false;
-      if (engagementTypeFilter !== "ALL" && item.type !== engagementTypeFilter) return false;
-      if (engagementRoleFilter !== "ALL" && item.contactRole !== engagementRoleFilter) return false;
-      return true;
-    });
-  }, [weeklyEngagements, engagementTypeFilter, engagementRoleFilter]);
 
   function syncTask(updatedTask: TaskRecord) {
     setTodayTasks((current) =>
@@ -139,102 +77,11 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
   }
 
   async function updateTaskStatus(taskId: string, status: TaskStatus) {
-    const updatedTask = await fetchJson<TaskRecord>("/api/tasks/" + taskId, {
+    const updatedTask = await fetchJson<TaskRecord>(`/api/tasks/${taskId}`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
     });
     syncTask(updatedTask);
-  }
-
-  async function saveEngagement() {
-    if (!engagementForm.title.trim()) {
-      setEngagementMessage("鐠囧嘲鍘涙繅顐㈠晸鐎佃甯撮弽鍥暯");
-      return;
-    }
-    if (!engagementForm.contactName.trim()) {
-      setEngagementMessage("鐠囧嘲鍘涙繅顐㈠晸鐎佃甯存禍?");
-      return;
-    }
-
-    const payload = {
-      title: engagementForm.title.trim(),
-      type: engagementForm.type,
-      date: engagementForm.date,
-      time: engagementForm.time || null,
-      contactName: engagementForm.contactName.trim(),
-      contactRole: engagementForm.contactRole,
-      note: engagementForm.note.trim() || null,
-      referenceLinks: parseEngagementLinks(engagementForm.referenceLinksText),
-      status: engagementForm.status,
-      remark: engagementForm.remark.trim() || null,
-    };
-
-    if (editingEngagementId) {
-      const updated = await fetchJson<WeeklyEngagementRecord>(
-        "/api/weekly-engagements/" + editingEngagementId,
-        {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        },
-      );
-      setWeeklyEngagements((current) =>
-        current.map((item) => (item.id === editingEngagementId ? updated : item)),
-      );
-      setEditingEngagementId(null);
-      setEngagementForm(initialEngagementForm);
-      setEngagementMessage("鐎佃甯寸拋鏉跨秿瀹稿弶娲块弬鑸偓?");
-      return;
-    }
-
-    const created = await fetchJson<WeeklyEngagementRecord>("/api/weekly-engagements", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    setWeeklyEngagements((current) => [created, ...current]);
-    setEngagementForm(initialEngagementForm);
-    setEngagementMessage("鐎佃甯寸拋鏉跨秿瀹告彃鍨卞鎭掆偓?");
-  }
-
-  function startEditEngagement(item: WeeklyEngagementRecord) {
-    setEditingEngagementId(item.id);
-    setEngagementForm({
-      title: item.title,
-      type: item.type,
-      date: item.date,
-      time: item.time ?? "",
-      contactName: item.contactName,
-      contactRole: item.contactRole,
-      note: item.note ?? "",
-      referenceLinksText: item.referenceLinks.join("\n"),
-      status: item.status,
-      remark: item.remark ?? "",
-    });
-    setEngagementMessage("正在编辑：" + item.title);
-  }
-
-  function cancelEditEngagement() {
-    setEditingEngagementId(null);
-    setEngagementForm(initialEngagementForm);
-    setEngagementMessage("瀹告彃褰囧☉鍫㈢椽鏉堟垯鈧?");
-  }
-
-  async function removeEngagement(item: WeeklyEngagementRecord) {
-    if (!window.confirm("确定删除“" + item.title + "”吗？")) return;
-    await fetchJson("/api/weekly-engagements/" + item.id, { method: "DELETE" });
-    setWeeklyEngagements((current) => current.filter((record) => record.id !== item.id));
-    if (editingEngagementId === item.id) {
-      setEditingEngagementId(null);
-      setEngagementForm(initialEngagementForm);
-    }
-    setEngagementMessage("鐎佃甯寸拋鏉跨秿瀹告彃鍨归梽銈冣偓?");
-  }
-
-  async function updateEngagementStatus(id: string, status: WeeklyEngagementStatus) {
-    const updated = await fetchJson<WeeklyEngagementRecord>("/api/weekly-engagements/" + id, {
-      method: "PATCH",
-      body: JSON.stringify({ status }),
-    });
-    setWeeklyEngagements((current) => current.map((item) => (item.id === id ? updated : item)));
   }
 
   async function handleSuggestTasks() {
@@ -247,7 +94,7 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
         body: JSON.stringify({ input: captureText }),
       });
       setSuggestions(response.suggestions);
-      setMessage("已拆出 " + response.suggestions.length + " 条任务建议。");
+      setMessage(`已拆出 ${response.suggestions.length} 条任务建议。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "拆解失败");
     } finally {
@@ -294,7 +141,7 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
       setWorkspaceDay(nextDay);
       setMessage("今日进度和复盘已保存。");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "淇濆瓨澶辫触");
+      setMessage(error instanceof Error ? error.message : "保存失败");
     } finally {
       setIsSubmitting(false);
     }
@@ -310,15 +157,15 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
     <div className="space-y-5">
       <PageHeading
         title="今日工作台"
-        description="把今天最关键的事收在一个页面里：看重点、改状态、收临时任务、记复盘。"
+        description="把今天最关键的事收拢到一个页面里：看重点、改状态、收临时任务、记复盘。"
         action={<Badge tone="accent">{workspaceDay.dateKey}</Badge>}
       />
 
       <div className="grid-panels md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="浠婃棩浠诲姟" value={counts.total} />
+        <StatCard label="今日任务" value={counts.total} />
         <StatCard label="已完成" value={counts.completed} />
-        <StatCard label="绛夊緟浠栦汉" value={counts.waiting} />
-        <StatCard label="閫炬湡鎻愰啋" value={counts.overdue} />
+        <StatCard label="等待他人" value={counts.waiting} />
+        <StatCard label="逾期提醒" value={counts.overdue} />
       </div>
 
       <div className="grid-panels xl:grid-cols-[1.2fr_0.8fr]">
@@ -326,7 +173,7 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="tiny-label">Top 3 Focus</div>
-              <h3 className="mt-2 text-xl font-semibold">浠婃棩涓変欢鏈€閲嶈鐨勪簨</h3>
+              <h3 className="mt-2 text-xl font-semibold">今日三件最重要的事</h3>
             </div>
             <Badge tone={workspaceTone(workspaceDay.progressStatus)}>
               {WORKSPACE_PROGRESS_LABELS[workspaceDay.progressStatus]}
@@ -338,7 +185,7 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
               <div key={task.id} className="panel-soft p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-xs muted-text">閲嶇偣 {index + 1}</div>
+                    <div className="text-xs muted-text">重点 {index + 1}</div>
                     <div className="mt-2 text-base font-semibold">{task.title}</div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Badge tone={taskPriorityTone(task.priority)}>
@@ -372,18 +219,14 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="tiny-label">Quick Capture</div>
-              <h3 className="mt-2 text-xl font-semibold">临时任务收集</h3>
+              <h3 className="mt-2 text-xl font-semibold">临时任务收集框</h3>
             </div>
-            <VoiceInput
-              onTranscript={(text) =>
-                setCaptureText((current) => (current ? current + "\n" + text : text))
-              }
-            />
+            <VoiceInput onTranscript={(text) => setCaptureText((current) => `${current}${current ? "\n" : ""}${text}`)} />
           </div>
 
           <textarea
             className="mt-4 min-h-32"
-            placeholder="渚嬪锛氭槑澶╀笅鍗?3 鐐瑰拰涓绘挱瀵规惌閰嶏紝鏃╀笂鍏堝璐э紝鍐嶅嚭鐩存挱棰勫憡鑴氭湰"
+            placeholder="例如：明天下午 3 点和主播对搭配，早上先对货，再出直播预告脚本"
             value={captureText}
             onChange={(event) => setCaptureText(event.target.value)}
           />
@@ -391,7 +234,8 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
           <div className="mt-4 flex flex-wrap gap-3">
             <button type="button" className="button-primary gap-2" onClick={() => void handleSuggestTasks()}>
               <Sparkles className="h-4 w-4" />
-              鑷姩鎷嗕换鍔?            </button>
+              自动拆任务
+            </button>
             <button
               type="button"
               className="button-secondary"
@@ -400,20 +244,20 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
                 setSuggestions([]);
               }}
             >
-              娓呯┖
+              清空
             </button>
           </div>
 
           {suggestions.length > 0 ? (
             <div className="mt-4 space-y-3">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium">浠诲姟寤鸿</div>
+                <div className="text-sm font-medium">任务建议</div>
                 <button type="button" className="button-secondary" onClick={() => void createAllSuggestions()}>
                   一键加入全部
                 </button>
               </div>
               {suggestions.map((suggestion) => (
-                <div key={suggestion.title + "-" + (suggestion.dueAt || "none")} className="panel-soft p-4">
+                <div key={`${suggestion.title}-${suggestion.dueAt ?? "none"}`} className="panel-soft p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-medium">{suggestion.title}</div>
@@ -429,7 +273,7 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
                       className="button-secondary"
                       onClick={() => void createSuggestedTask(suggestion)}
                     >
-                      鍔犲叆浠诲姟
+                      加入任务
                     </button>
                   </div>
                 </div>
@@ -439,252 +283,13 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
         </SectionCard>
       </div>
 
+      <WeeklyEngagementsClient initialEngagements={initialSnapshot.weeklyEngagements} />
 
-      <SectionCard>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="tiny-label">This Week</div>
-            <h3 className="mt-2 text-xl font-semibold">鏈懆瀵规帴</h3>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={engagementTypeFilter}
-              onChange={(event) => setEngagementTypeFilter(event.target.value as "ALL" | WeeklyEngagementType)}
-              className="w-[140px]"
-            >
-              <option value="ALL">鍏ㄩ儴绫诲瀷</option>
-              {WEEKLY_ENGAGEMENT_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={engagementRoleFilter}
-              onChange={(event) => setEngagementRoleFilter(event.target.value as "ALL" | WeeklyEngagementRole)}
-              className="w-[140px]"
-            >
-              <option value="ALL">鍏ㄩ儴瀵规帴浜?</option>
-              {WEEKLY_ENGAGEMENT_ROLE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <Badge>{filteredEngagements.length} 条</Badge>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="xl:col-span-2">
-            <label className="field-label">瀵规帴鏍囬</label>
-            <input
-              value={engagementForm.title}
-              onChange={(event) =>
-                setEngagementForm((current) => ({ ...current, title: event.target.value }))
-              }
-              placeholder="渚嬪锛氬拰涓绘挱纭鏈懆鐩存挱鎺掓湡"
-            />
-          </div>
-          <div>
-            <label className="field-label">鏃ユ湡</label>
-            <input
-              type="date"
-              value={engagementForm.date}
-              onChange={(event) =>
-                setEngagementForm((current) => ({ ...current, date: event.target.value }))
-              }
-            />
-          </div>
-          <div>
-            <label className="field-label">鏃堕棿</label>
-            <input
-              type="time"
-              value={engagementForm.time}
-              onChange={(event) =>
-                setEngagementForm((current) => ({ ...current, time: event.target.value }))
-              }
-            />
-          </div>
-          <div>
-            <label className="field-label">瀵规帴浜?</label>
-            <input
-              value={engagementForm.contactName}
-              onChange={(event) =>
-                setEngagementForm((current) => ({ ...current, contactName: event.target.value }))
-              }
-              placeholder="涓绘挱 / 鎽勫奖 / 鍝佺墝鏂?"
-            />
-          </div>
-          <div>
-            <label className="field-label">瀵规帴瀵硅薄</label>
-            <select
-              value={engagementForm.contactRole}
-              onChange={(event) =>
-                setEngagementForm((current) => ({
-                  ...current,
-                  contactRole: event.target.value as WeeklyEngagementRole,
-                }))
-              }
-            >
-              {WEEKLY_ENGAGEMENT_ROLE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="field-label">瀵规帴绫诲瀷</label>
-            <select
-              value={engagementForm.type}
-              onChange={(event) =>
-                setEngagementForm((current) => ({
-                  ...current,
-                  type: event.target.value as WeeklyEngagementType,
-                }))
-              }
-            >
-              {WEEKLY_ENGAGEMENT_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="field-label">状态</label>
-            <select
-              value={engagementForm.status}
-              onChange={(event) =>
-                setEngagementForm((current) => ({
-                  ...current,
-                  status: event.target.value as WeeklyEngagementStatus,
-                }))
-              }
-            >
-              {WEEKLY_ENGAGEMENT_STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="md:col-span-2 xl:col-span-4">
-            <label className="field-label">瀵规帴浜嬮」</label>
-            <textarea
-              className="min-h-20"
-              value={engagementForm.note}
-              onChange={(event) =>
-                setEngagementForm((current) => ({ ...current, note: event.target.value }))
-              }
-              placeholder="鎻忚堪瑕佽皥鐨勫唴瀹广€佹敮鎸佽鍑烘憚褰便€佸叧閿粏鑺傜瓑"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="field-label">鍙傝€冮摼鎺? (鍙€?)</label>
-            <textarea
-              className="min-h-20"
-              value={engagementForm.referenceLinksText}
-              onChange={(event) =>
-                setEngagementForm((current) => ({
-                  ...current,
-                  referenceLinksText: event.target.value,
-                }))
-              }
-              placeholder="姣忚涓€涓摼鎺ワ紝渚嬪：https://www.xiaohongshu.com/explore/..."
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="field-label">澶囨敞 (鍙€?)</label>
-            <textarea
-              className="min-h-20"
-              value={engagementForm.remark}
-              onChange={(event) =>
-                setEngagementForm((current) => ({ ...current, remark: event.target.value }))
-              }
-              placeholder="渚嬪锛氬叾瀹炴棩绋嬫渶濂芥槸涓婂崍"
-            />
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button type="button" className="button-primary gap-2" onClick={() => void saveEngagement()}>
-            <Plus className="h-4 w-4" />
-            {editingEngagementId ? "保存修改" : "新增对接"}
-          </button>
-          {editingEngagementId ? (
-            <button type="button" className="button-secondary gap-2" onClick={cancelEditEngagement}>
-              鍙栨秷缂栬緫
-            </button>
-          ) : null}
-          {engagementMessage ? <span className="self-center text-sm muted-text">{engagementMessage}</span> : null}
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {filteredEngagements.map((item) => (
-            <div key={item.id} className="panel-soft p-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0 space-y-2">
-                  <div className="text-base font-semibold">{item.title}</div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge>{formatEngagementSchedule(item.date, item.time)}</Badge>
-                    <Badge>{item.contactName}</Badge>
-                    <Badge>{WEEKLY_ENGAGEMENT_ROLE_LABELS[item.contactRole]}</Badge>
-                    <Badge>{WEEKLY_ENGAGEMENT_TYPE_LABELS[item.type]}</Badge>
-                    <Badge>{WEEKLY_ENGAGEMENT_STATUS_LABELS[item.status]}</Badge>
-                  </div>
-                  {item.note ? <div className="text-sm leading-6 muted-text">{item.note}</div> : null}
-                  {item.referenceLinks.length > 0 ? (
-                    <div className="flex flex-wrap gap-2 text-sm">
-                      <span className="muted-text">鍙傝€冮摼鎺? /</span>
-                      {item.referenceLinks.map((link, index) => (
-                        <a
-                          key={item.id + "-link-" + index}
-                          href={link}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[color:var(--accent)] hover:underline"
-                        >
-                          {"链接 " + (index + 1)}
-                        </a>
-                      ))}
-                    </div>
-                  ) : null}
-                  {item.remark ? <div className="text-xs muted-text">备注：{item.remark}</div> : null}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <select
-                    value={item.status}
-                    onChange={(event) =>
-                      void updateEngagementStatus(item.id, event.target.value as WeeklyEngagementStatus)
-                    }
-                  >
-                    {WEEKLY_ENGAGEMENT_STATUS_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button type="button" className="button-secondary gap-2" onClick={() => startEditEngagement(item)}>
-                    <Pencil className="h-4 w-4" />
-                    缂栬緫
-                  </button>
-                  <button type="button" className="button-secondary gap-2" onClick={() => void removeEngagement(item)}>
-                    <Trash2 className="h-4 w-4" />
-                    鍒犻櫎
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
       <div className="grid-panels xl:grid-cols-[1.1fr_0.9fr]">
         <SectionCard>
           <div className="flex items-center gap-2">
             <ClipboardList className="h-5 w-5" />
-            <h3 className="text-xl font-semibold">浠婃棩浠诲姟鍒楄〃</h3>
+            <h3 className="text-xl font-semibold">今日任务列表</h3>
           </div>
 
           <div className="mt-4 space-y-3">
@@ -726,11 +331,11 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="tiny-label">Daily Review</div>
-              <h3 className="mt-2 text-xl font-semibold">浠婃棩杩涘害鐘舵€佷笌涓嬬彮澶嶇洏</h3>
+              <h3 className="mt-2 text-xl font-semibold">今日进度状态与下班复盘</h3>
             </div>
             <button type="button" className="button-primary gap-2" onClick={() => void saveWorkspace()}>
               <Save className="h-4 w-4" />
-              淇濆瓨
+              保存
             </button>
           </div>
 
@@ -755,7 +360,7 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
             </div>
 
             <div>
-              <label className="field-label">今日最核心的推进方向</label>
+              <label className="field-label">今天最核心的推进方向</label>
               <textarea
                 className="min-h-24"
                 value={workspaceDay.morningFocus ?? ""}
@@ -783,7 +388,7 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
             </div>
 
             <div>
-              <label className="field-label">鏄庢棩璁″垝</label>
+              <label className="field-label">明日计划</label>
               <textarea
                 className="min-h-24"
                 value={workspaceDay.tomorrowPlan ?? ""}
@@ -802,7 +407,7 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
                   <div className="font-medium">最近一次日报草稿</div>
                   <button type="button" className="button-secondary gap-2" onClick={() => void copyDailyReport()}>
                     <Copy className="h-4 w-4" />
-                    澶嶅埗
+                    复制
                   </button>
                 </div>
                 <p className="mt-3 text-sm leading-6 muted-text">{latestReport.dailyReport}</p>
@@ -815,7 +420,7 @@ export function DashboardClient({ initialSnapshot }: { initialSnapshot: Dashboar
       {message ? (
         <div className="flex items-center gap-2 rounded-full border bg-white/90 px-4 py-3 text-sm">
           <CheckCheck className="h-4 w-4 text-[color:var(--accent)]" />
-          <span>{isSubmitting ? "澶勭悊涓?.." : message}</span>
+          <span>{isSubmitting ? "处理中..." : message}</span>
         </div>
       ) : null}
     </div>

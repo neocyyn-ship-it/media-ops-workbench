@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 
 import { isOneOf } from "@/lib/options";
 import {
@@ -18,7 +18,7 @@ function normalizeLinks(input: unknown) {
   }
   if (typeof input === "string") {
     return input
-      .split(/[\n,，\s]+/)
+      .split(/[\n,\s]+/)
       .map((item) => item.trim())
       .filter(Boolean);
   }
@@ -33,7 +33,7 @@ export async function PATCH(
   const body = await request.json();
 
   if (!getWeeklyEngagementById(id)) {
-    return NextResponse.json({ error: "瀵规帴璁板綍涓嶅瓨鍦?" }, { status: 404 });
+    return NextResponse.json({ error: "对接记录不存在" }, { status: 404 });
   }
 
   const updated = updateWeeklyEngagement(id, {
@@ -61,7 +61,7 @@ export async function DELETE(
   const { id } = await params;
 
   if (!getWeeklyEngagementById(id)) {
-    return NextResponse.json({ error: "瀵规帴璁板綍涓嶅瓨鍦?" }, { status: 404 });
+    return NextResponse.json({ error: "对接记录不存在" }, { status: 404 });
   }
 
   const record = deleteWeeklyEngagement(id);

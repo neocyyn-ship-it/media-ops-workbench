@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 
 import { getAppDateKey } from "@/lib/app-time";
 import { isOneOf } from "@/lib/options";
@@ -15,7 +15,7 @@ function normalizeLinks(input: unknown) {
   }
   if (typeof input === "string") {
     return input
-      .split(/[\n,，\s]+/)
+      .split(/[\n,\s]+/)
       .map((item) => item.trim())
       .filter(Boolean);
   }
@@ -29,10 +29,10 @@ export function GET() {
 export async function POST(request: Request) {
   const body = await request.json();
   if (!body.title?.trim()) {
-    return NextResponse.json({ error: "璇峰厛濉啓瀵规帴鏍囬" }, { status: 400 });
+    return NextResponse.json({ error: "请先填写对接标题" }, { status: 400 });
   }
   if (!body.contactName?.trim()) {
-    return NextResponse.json({ error: "璇峰厛濉啓瀵规帴浜?" }, { status: 400 });
+    return NextResponse.json({ error: "请先填写对接人" }, { status: 400 });
   }
 
   const dateValue = typeof body.date === "string" && body.date.trim() ? body.date.trim() : getAppDateKey();
