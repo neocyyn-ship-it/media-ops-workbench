@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Check, LoaderCircle, SendHorizontal, Sparkles, X } from "lucide-react";
+import { Bot, Check, Copy, LoaderCircle, SendHorizontal, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { VoiceInput } from "@/components/voice-input";
@@ -120,7 +120,9 @@ export function AssistantDock() {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const copyTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -138,6 +140,14 @@ export function AssistantDock() {
   useEffect(() => {
     window.localStorage.setItem(storageKey, JSON.stringify(messages));
   }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
@@ -455,6 +465,29 @@ async function requestContentSuggestions(message: string) {
     window.localStorage.setItem(storageKey, JSON.stringify(initialMessages));
   }
 
+  async function copyConversation() {
+    const text = messages
+      .map((message) => {
+        const role = message.role === "user" ? "我" : "AI";
+        return `${role}：${normalizeMessage(message.content)}`;
+      })
+      .join("\n\n");
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setError("");
+      if (copyTimerRef.current) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = window.setTimeout(() => {
+        setCopied(false);
+      }, 1800);
+    } catch {
+      setError("复制失败，请检查浏览器剪贴板权限。");
+    }
+  }
+
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
       {open ? (
@@ -481,7 +514,7 @@ async function requestContentSuggestions(message: string) {
               <div key={message.id} className={cn("space-y-2", message.role === "user" ? "items-end" : "")}>
                 <div
                   className={cn(
-                    "max-w-[88%] rounded-[22px] px-4 py-3",
+                    "max-w-[88%] rounded-[22px] px-4 py-3 select-text",
                     message.role === "user"
                       ? "ml-auto bg-[color:var(--accent)] text-[color:var(--accent-ink)]"
                       : "bg-white/90",
@@ -689,6 +722,14 @@ async function requestContentSuggestions(message: string) {
             <div className="mt-3 flex items-center justify-between gap-3">
               <button type="button" className="text-sm muted-text" onClick={resetChat}>
                 清空对话
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-sm muted-text"
+                onClick={() => void copyConversation()}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {copied ? "已复制" : "复制对话"}
               </button>
               <button
                 type="button"

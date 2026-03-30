@@ -25,6 +25,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json(
+      { error: "UNAUTHORIZED", message: "Please login first." },
+      { status: 401 },
+    );
+  }
+
   const loginUrl = new URL("/login", request.url);
   const nextPath = pathname === "/" ? "/" : `${pathname}${search}`;
   loginUrl.searchParams.set("next", nextPath);
