@@ -489,9 +489,16 @@ async function requestContentSuggestions(message: string) {
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
+    <div
+      className={cn(
+        "fixed z-50 flex flex-col gap-3",
+        open
+          ? "inset-0 items-stretch sm:inset-auto sm:bottom-5 sm:right-5 sm:items-end"
+          : "bottom-5 right-5 items-end",
+      )}
+    >
       {open ? (
-        <div className="panel w-[min(96vw,420px)] overflow-hidden border bg-[color:var(--panel)]">
+        <div className="panel flex h-screen w-screen flex-col overflow-hidden border bg-[color:var(--panel)] sm:h-[min(90vh,720px)] sm:w-[min(96vw,420px)] sm:rounded-[28px]">
           <div className="flex items-start justify-between gap-3 border-b px-4 py-4">
             <div>
               <div className="tiny-label">AI Assistant</div>
@@ -509,7 +516,7 @@ async function requestContentSuggestions(message: string) {
             </button>
           </div>
 
-          <div ref={listRef} className="max-h-[52vh] space-y-3 overflow-y-auto px-4 py-4">
+          <div ref={listRef} className="flex-1 min-h-0 space-y-3 overflow-y-auto px-4 py-4">
             {messages.map((message) => (
               <div key={message.id} className={cn("space-y-2", message.role === "user" ? "items-end" : "")}>
                 <div
