@@ -493,11 +493,13 @@ async function requestContentSuggestions(message: string) {
     <div
       className={cn(
         "fixed z-50 flex flex-col gap-3",
-        open ? "inset-0 items-stretch" : "bottom-5 right-5 items-end",
+        open
+          ? "inset-0 items-stretch sm:inset-auto sm:bottom-5 sm:right-5 sm:items-end"
+          : "bottom-5 right-5 items-end",
       )}
     >
       {open ? (
-        <div className="panel flex h-screen w-screen flex-col overflow-hidden border bg-[color:var(--panel)]">
+        <div className="panel flex h-screen w-screen flex-col overflow-hidden border bg-[color:var(--panel)] sm:h-[min(70vh,640px)] sm:w-[min(96vw,380px)] sm:rounded-[28px]">
           <div className="flex items-start justify-between gap-3 border-b px-4 py-4">
             <div>
               <div className="tiny-label">AI Assistant</div>
