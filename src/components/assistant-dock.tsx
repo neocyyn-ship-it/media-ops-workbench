@@ -1,7 +1,8 @@
 "use client";
 
 import { Bot, Check, Copy, LoaderCircle, SendHorizontal, Sparkles, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { VoiceInput } from "@/components/voice-input";
 import { fetchJson } from "@/lib/client-fetch";
@@ -35,6 +36,8 @@ type ChatMessage = {
   actions?: AssistantAction[];
   contentActions?: AssistantContentAction[];
 };
+
+type DragMode = "move" | "resize";
 
 const quickPrompts = [
   "帮我拆今天最重要的 3 个任务",
@@ -122,8 +125,21 @@ export function AssistantDock() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [panelPos, setPanelPos] = useState({ x: 0, y: 0 });
+  const [panelSize, setPanelSize] = useState({ width: 360, height: 560 });
   const listRef = useRef<HTMLDivElement | null>(null);
   const copyTimerRef = useRef<number | null>(null);
+  const panelPosRef = useRef(panelPos);
+  const panelSizeRef = useRef(panelSize);
+  const dragStateRef = useRef<{
+    mode: DragMode;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    originHeight: number;
+  } | null>(null);
 
   useEffect(() => {
     try {
@@ -141,6 +157,52 @@ export function AssistantDock() {
   useEffect(() => {
     window.localStorage.setItem(storageKey, JSON.stringify(messages));
   }, [messages]);
+
+  useEffect(() => {
+    panelPosRef.current = panelPos;
+  }, [panelPos]);
+
+  useEffect(() => {
+    panelSizeRef.current = panelSize;
+  }, [panelSize]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(min-width: 640px)");
+    const update = () => setIsDesktop(media.matches);
+    update();
+    if (media.addEventListener) {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+    media.addListener(update);
+    return () => media.removeListener(update);
+  }, []);
+
+  const syncPanelPosition = useCallback(() => {
+    if (!isDesktop || typeof window === "undefined") return;
+    const width = panelSizeRef.current.width;
+    const height = panelSizeRef.current.height;
+    const maxX = Math.max(8, window.innerWidth - width - 8);
+    const maxY = Math.max(8, window.innerHeight - height - 8);
+    const fallbackX = window.innerWidth - width - 24;
+    const fallbackY = window.innerHeight - height - 24;
+    const nextX = Math.min(Math.max(panelPosRef.current.x || fallbackX, 8), maxX);
+    const nextY = Math.min(Math.max(panelPosRef.current.y || fallbackY, 8), maxY);
+    setPanelPos({ x: nextX, y: nextY });
+  }, [isDesktop]);
+
+  useEffect(() => {
+    if (!open) return;
+    syncPanelPosition();
+  }, [open, syncPanelPosition]);
+
+  useEffect(() => {
+    if (!open || !isDesktop) return;
+    const handleResize = () => syncPanelPosition();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [open, isDesktop, syncPanelPosition]);
 
   useEffect(() => {
     return () => {
@@ -164,6 +226,58 @@ export function AssistantDock() {
       return `${trimmedCurrent}${separator}${text}`;
     });
   }
+
+  const handlePointerMove = useCallback((event: PointerEvent) => {
+    const state = dragStateRef.current;
+    if (!state || typeof window === "undefined") return;
+    const clamp = (value: number, min: number, max: number) =>
+      Math.min(Math.max(value, min), max);
+    const width = panelSizeRef.current.width;
+    const height = panelSizeRef.current.height;
+    const maxX = Math.max(8, window.innerWidth - width - 8);
+    const maxY = Math.max(8, window.innerHeight - height - 8);
+    const dx = event.clientX - state.startX;
+    const dy = event.clientY - state.startY;
+
+    if (state.mode === "move") {
+      setPanelPos({
+        x: clamp(state.originX + dx, 8, maxX),
+        y: clamp(state.originY + dy, 8, maxY),
+      });
+      return;
+    }
+
+    const minHeight = 380;
+    const nextHeight = clamp(state.originHeight + dy, minHeight, window.innerHeight - 24);
+    setPanelSize((current) => ({ ...current, height: nextHeight }));
+    setPanelPos((current) => ({
+      x: current.x,
+      y: clamp(current.y, 8, window.innerHeight - nextHeight - 8),
+    }));
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    dragStateRef.current = null;
+    window.removeEventListener("pointermove", handlePointerMove);
+  }, [handlePointerMove]);
+
+  const beginDrag = useCallback(
+    (mode: DragMode, event: ReactPointerEvent<HTMLDivElement | HTMLButtonElement>) => {
+      if (!isDesktop) return;
+      event.preventDefault();
+      dragStateRef.current = {
+        mode,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: panelPosRef.current.x,
+        originY: panelPosRef.current.y,
+        originHeight: panelSizeRef.current.height,
+      };
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp, { once: true });
+    },
+    [handlePointerMove, handlePointerUp, isDesktop],
+  );
 
   function updateTaskSuggestion(
     messageId: string,
@@ -250,7 +364,7 @@ export function AssistantDock() {
     return data.reply;
   }
 
-async function requestTaskSuggestions(message: string) {
+  async function requestTaskSuggestions(message: string) {
     if (!shouldSuggestTaskActions(message)) {
       return [];
     }
@@ -263,27 +377,27 @@ async function requestTaskSuggestions(message: string) {
       return response.suggestions.slice(0, 4);
     } catch {
       return [];
-  }
-}
-
-async function requestContentSuggestions(message: string) {
-  if (!shouldSuggestTaskActions(message)) {
-    return [];
+    }
   }
 
-  try {
-    const response = await fetchJson<{ suggestions: ContentPlanSuggestion[] }>(
-      "/api/assist/content",
-      {
-        method: "POST",
-        body: JSON.stringify({ input: message }),
-      },
-    );
-    return response.suggestions.slice(0, 3);
-  } catch {
-    return [];
+  async function requestContentSuggestions(message: string) {
+    if (!shouldSuggestTaskActions(message)) {
+      return [];
+    }
+
+    try {
+      const response = await fetchJson<{ suggestions: ContentPlanSuggestion[] }>(
+        "/api/assist/content",
+        {
+          method: "POST",
+          body: JSON.stringify({ input: message }),
+        },
+      );
+      return response.suggestions.slice(0, 3);
+    } catch {
+      return [];
+    }
   }
-}
 
   async function sendMessage(rawMessage: string) {
     const message = rawMessage.trim();
@@ -493,14 +607,31 @@ async function requestContentSuggestions(message: string) {
     <div
       className={cn(
         "fixed z-50 flex flex-col gap-3",
-        open
-          ? "inset-0 items-stretch sm:inset-auto sm:bottom-5 sm:right-5 sm:items-end"
-          : "bottom-5 right-5 items-end",
+        open ? "inset-0 items-stretch" : "bottom-5 right-5 items-end",
       )}
     >
       {open ? (
-        <div className="panel flex h-screen w-screen flex-col overflow-hidden border bg-[color:var(--panel)] sm:h-[min(70vh,640px)] sm:w-[min(96vw,380px)] sm:rounded-[28px]">
-          <div className="flex items-start justify-between gap-3 border-b px-4 py-4">
+        <div
+          className={cn(
+            "panel relative flex h-screen w-screen flex-col overflow-hidden border bg-[color:var(--panel)]",
+            isDesktop
+              ? "absolute left-0 top-0 rounded-[28px] shadow-[var(--shadow)]"
+              : "absolute inset-0",
+          )}
+          style={
+            isDesktop
+              ? {
+                  width: panelSize.width,
+                  height: panelSize.height,
+                  transform: `translate3d(${panelPos.x}px, ${panelPos.y}px, 0)`,
+                }
+              : undefined
+          }
+        >
+          <div
+            className="flex items-start justify-between gap-3 border-b px-4 py-4 sm:cursor-move"
+            onPointerDown={(event) => beginDrag("move", event)}
+          >
             <div>
               <div className="tiny-label">AI Assistant</div>
               <div className="mt-1 text-lg font-semibold">AI 运营助理</div>
@@ -511,6 +642,7 @@ async function requestContentSuggestions(message: string) {
             <button
               type="button"
               className="rounded-full border bg-white/80 p-2"
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={() => setOpen(false)}
             >
               <X className="h-4 w-4" />
@@ -519,7 +651,10 @@ async function requestContentSuggestions(message: string) {
 
           <div ref={listRef} className="flex-1 min-h-0 space-y-3 overflow-y-auto px-4 py-4">
             {messages.map((message) => (
-              <div key={message.id} className={cn("space-y-2", message.role === "user" ? "items-end" : "")}>
+              <div
+                key={message.id}
+                className={cn("space-y-2", message.role === "user" ? "items-end" : "")}
+              >
                 <div
                   className={cn(
                     "max-w-[88%] rounded-[22px] px-4 py-3 select-text",
@@ -637,7 +772,8 @@ async function requestContentSuggestions(message: string) {
                           disabled={action.status === "saving" || action.status === "done"}
                         />
                         <div className="mt-1 text-xs muted-text">
-                          {CONTENT_TYPE_LABELS[action.suggestion.contentType]} · {CONTENT_STATUS_LABELS[action.suggestion.status]}
+                          {CONTENT_TYPE_LABELS[action.suggestion.contentType]} ·{" "}
+                          {CONTENT_STATUS_LABELS[action.suggestion.status]}
                         </div>
                         {action.error ? (
                           <div className="mt-2 text-xs text-rose-700">{action.error}</div>
@@ -767,6 +903,15 @@ async function requestContentSuggestions(message: string) {
               </button>
             </div>
           </div>
+
+          {isDesktop ? (
+            <button
+              type="button"
+              aria-label="调整对话高度"
+              className="absolute bottom-2 right-3 h-3 w-10 cursor-ns-resize rounded-full bg-slate-200/80"
+              onPointerDown={(event) => beginDrag("resize", event)}
+            />
+          ) : null}
         </div>
       ) : null}
 
