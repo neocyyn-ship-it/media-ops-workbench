@@ -1,6 +1,16 @@
 "use client";
 
-import { Bot, Check, Copy, LoaderCircle, Minus, SendHorizontal, Sparkles, X } from "lucide-react";
+import {
+  Bot,
+  Check,
+  Copy,
+  LoaderCircle,
+  Maximize2,
+  Minimize2,
+  SendHorizontal,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
@@ -126,6 +136,7 @@ export function AssistantDock() {
   const [copied, setCopied] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
   const [panelPos, setPanelPos] = useState({ x: 0, y: 0 });
   const [panelSize, setPanelSize] = useState({ width: 360, height: 560 });
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -138,8 +149,13 @@ export function AssistantDock() {
     startY: number;
     originX: number;
     originY: number;
+    originWidth: number;
     originHeight: number;
   } | null>(null);
+  const restoreBoundsRef = useRef({
+    pos: panelPos,
+    size: panelSize,
+  });
 
   useEffect(() => {
     try {
@@ -167,6 +183,14 @@ export function AssistantDock() {
   }, [panelSize]);
 
   useEffect(() => {
+    if (isMaximized) return;
+    restoreBoundsRef.current = {
+      pos: panelPos,
+      size: panelSize,
+    };
+  }, [isMaximized, panelPos, panelSize]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const media = window.matchMedia("(min-width: 640px)");
     const update = () => setIsDesktop(media.matches);
@@ -180,9 +204,12 @@ export function AssistantDock() {
   }, []);
 
   const syncPanelPosition = useCallback(() => {
-    if (!isDesktop || typeof window === "undefined") return;
-    const width = panelSizeRef.current.width;
-    const height = panelSizeRef.current.height;
+    if (!isDesktop || isMaximized || typeof window === "undefined") return;
+    const width = Math.min(panelSizeRef.current.width, Math.max(320, window.innerWidth - 16));
+    const height = Math.min(panelSizeRef.current.height, Math.max(320, window.innerHeight - 16));
+    if (width !== panelSizeRef.current.width || height !== panelSizeRef.current.height) {
+      setPanelSize({ width, height });
+    }
     const maxX = Math.max(8, window.innerWidth - width - 8);
     const maxY = Math.max(8, window.innerHeight - height - 8);
     const fallbackX = window.innerWidth - width - 24;
@@ -190,7 +217,7 @@ export function AssistantDock() {
     const nextX = Math.min(Math.max(panelPosRef.current.x || fallbackX, 8), maxX);
     const nextY = Math.min(Math.max(panelPosRef.current.y || fallbackY, 8), maxY);
     setPanelPos({ x: nextX, y: nextY });
-  }, [isDesktop]);
+  }, [isDesktop, isMaximized]);
 
   useEffect(() => {
     if (!open) return;
@@ -198,11 +225,11 @@ export function AssistantDock() {
   }, [open, syncPanelPosition]);
 
   useEffect(() => {
-    if (!open || !isDesktop) return;
+    if (!open || !isDesktop || isMaximized) return;
     const handleResize = () => syncPanelPosition();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [open, isDesktop, syncPanelPosition]);
+  }, [open, isDesktop, isMaximized, syncPanelPosition]);
 
   useEffect(() => {
     return () => {
@@ -247,13 +274,15 @@ export function AssistantDock() {
       return;
     }
 
-    const minHeight = 380;
-    const nextHeight = clamp(state.originHeight + dy, minHeight, window.innerHeight - 24);
-    setPanelSize((current) => ({ ...current, height: nextHeight }));
-    setPanelPos((current) => ({
-      x: current.x,
-      y: clamp(current.y, 8, window.innerHeight - nextHeight - 8),
-    }));
+    const minWidth = 320;
+    const minHeight = 320;
+    const nextWidth = clamp(state.originWidth + dx, minWidth, window.innerWidth - state.originX - 8);
+    const nextHeight = clamp(
+      state.originHeight + dy,
+      minHeight,
+      window.innerHeight - state.originY - 8,
+    );
+    setPanelSize({ width: nextWidth, height: nextHeight });
   }, []);
 
   const handlePointerUp = useCallback(() => {
@@ -263,7 +292,7 @@ export function AssistantDock() {
 
   const beginDrag = useCallback(
     (mode: DragMode, event: ReactPointerEvent<HTMLDivElement | HTMLButtonElement>) => {
-      if (!isDesktop) return;
+      if (!isDesktop || isMaximized) return;
       event.preventDefault();
       dragStateRef.current = {
         mode,
@@ -271,13 +300,32 @@ export function AssistantDock() {
         startY: event.clientY,
         originX: panelPosRef.current.x,
         originY: panelPosRef.current.y,
+        originWidth: panelSizeRef.current.width,
         originHeight: panelSizeRef.current.height,
       };
       window.addEventListener("pointermove", handlePointerMove);
       window.addEventListener("pointerup", handlePointerUp, { once: true });
     },
-    [handlePointerMove, handlePointerUp, isDesktop],
+    [handlePointerMove, handlePointerUp, isDesktop, isMaximized],
   );
+
+  const toggleMaximize = useCallback(() => {
+    if (!isDesktop || typeof window === "undefined") return;
+
+    if (isMaximized) {
+      const { pos, size } = restoreBoundsRef.current;
+      setPanelPos(pos);
+      setPanelSize(size);
+      setIsMaximized(false);
+      return;
+    }
+
+    restoreBoundsRef.current = {
+      pos: panelPosRef.current,
+      size: panelSizeRef.current,
+    };
+    setIsMaximized(true);
+  }, [isDesktop, isMaximized]);
 
   function updateTaskSuggestion(
     messageId: string,
@@ -364,7 +412,7 @@ export function AssistantDock() {
     return data.reply;
   }
 
-  async function requestTaskSuggestions(message: string) {
+async function requestTaskSuggestions(message: string) {
     if (!shouldSuggestTaskActions(message)) {
       return [];
     }
@@ -377,27 +425,27 @@ export function AssistantDock() {
       return response.suggestions.slice(0, 4);
     } catch {
       return [];
-    }
+  }
+}
+
+async function requestContentSuggestions(message: string) {
+  if (!shouldSuggestTaskActions(message)) {
+    return [];
   }
 
-  async function requestContentSuggestions(message: string) {
-    if (!shouldSuggestTaskActions(message)) {
-      return [];
-    }
-
-    try {
-      const response = await fetchJson<{ suggestions: ContentPlanSuggestion[] }>(
-        "/api/assist/content",
-        {
-          method: "POST",
-          body: JSON.stringify({ input: message }),
-        },
-      );
-      return response.suggestions.slice(0, 3);
-    } catch {
-      return [];
-    }
+  try {
+    const response = await fetchJson<{ suggestions: ContentPlanSuggestion[] }>(
+      "/api/assist/content",
+      {
+        method: "POST",
+        body: JSON.stringify({ input: message }),
+      },
+    );
+    return response.suggestions.slice(0, 3);
+  } catch {
+    return [];
   }
+}
 
   async function sendMessage(rawMessage: string) {
     const message = rawMessage.trim();
@@ -615,11 +663,13 @@ export function AssistantDock() {
           className={cn(
             "panel relative flex h-screen w-screen flex-col overflow-hidden border bg-[color:var(--panel)]",
             isDesktop
-              ? "absolute left-0 top-0 rounded-[28px] shadow-[var(--shadow)]"
+              ? isMaximized
+                ? "absolute inset-0 rounded-none shadow-none"
+                : "absolute left-0 top-0 rounded-[28px] shadow-[var(--shadow)]"
               : "absolute inset-0",
           )}
           style={
-            isDesktop
+            isDesktop && !isMaximized
               ? {
                   width: panelSize.width,
                   height: panelSize.height,
@@ -645,23 +695,19 @@ export function AssistantDock() {
             >
               <button
                 type="button"
-                aria-label="收起助理"
+                aria-label={isMaximized ? "restore window" : "maximize window"}
                 className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-                onClick={() => setOpen(false)}
+                onClick={() => toggleMaximize()}
               >
-                <Minus className="h-4 w-4" />
+                {isMaximized ? (
+                  <Minimize2 className="h-4 w-4" />
+                ) : (
+                  <Maximize2 className="h-4 w-4" />
+                )}
               </button>
               <button
                 type="button"
-                aria-label="复制对话"
-                className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-                onClick={() => void copyConversation()}
-              >
-                <Copy className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                aria-label="关闭助理"
+                aria-label="close assistant"
                 className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-rose-600"
                 onClick={() => setOpen(false)}
               >
@@ -672,10 +718,7 @@ export function AssistantDock() {
 
           <div ref={listRef} className="flex-1 min-h-0 space-y-3 overflow-y-auto px-4 py-4">
             {messages.map((message) => (
-              <div
-                key={message.id}
-                className={cn("space-y-2", message.role === "user" ? "items-end" : "")}
-              >
+              <div key={message.id} className={cn("space-y-2", message.role === "user" ? "items-end" : "")}>
                 <div
                   className={cn(
                     "max-w-[88%] rounded-[22px] px-4 py-3 select-text",
@@ -793,8 +836,7 @@ export function AssistantDock() {
                           disabled={action.status === "saving" || action.status === "done"}
                         />
                         <div className="mt-1 text-xs muted-text">
-                          {CONTENT_TYPE_LABELS[action.suggestion.contentType]} ·{" "}
-                          {CONTENT_STATUS_LABELS[action.suggestion.status]}
+                          {CONTENT_TYPE_LABELS[action.suggestion.contentType]} · {CONTENT_STATUS_LABELS[action.suggestion.status]}
                         </div>
                         {action.error ? (
                           <div className="mt-2 text-xs text-rose-700">{action.error}</div>
@@ -925,28 +967,28 @@ export function AssistantDock() {
             </div>
           </div>
 
-          {isDesktop ? (
+          {isDesktop && !isMaximized ? (
             <button
               type="button"
-              aria-label="调整对话高度"
-              className="absolute bottom-2 right-3 h-3 w-10 cursor-ns-resize rounded-full bg-slate-200/80"
+              aria-label="resize assistant window"
+              className="absolute bottom-3 right-3 flex h-4 w-4 cursor-nwse-resize items-center justify-center rounded-sm border border-slate-300/90 bg-white/85 text-slate-400 shadow-sm"
               onPointerDown={(event) => beginDrag("resize", event)}
-            />
+            >
+              <span className="pointer-events-none text-[10px] leading-none">+</span>
+            </button>
           ) : null}
         </div>
       ) : null}
 
-      {!open ? (
-        <button
-          type="button"
-          className="button-primary gap-2 px-5 py-3 shadow-[var(--shadow)]"
-          onClick={() => setOpen(true)}
-        >
-          <Bot className="h-4 w-4" />
-          AI 运营助理
-          <Sparkles className="h-4 w-4" />
-        </button>
-      ) : null}
+      <button
+        type="button"
+        className={cn("button-primary gap-2 px-5 py-3 shadow-[var(--shadow)]", open ? "hidden" : "")}
+        onClick={() => setOpen(true)}
+      >
+        {open ? <X className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+        {open ? "收起助理" : "AI 运营助理"}
+        <Sparkles className="h-4 w-4" />
+      </button>
     </div>
   );
 }
