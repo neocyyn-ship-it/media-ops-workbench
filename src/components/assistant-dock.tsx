@@ -686,8 +686,8 @@ async function requestContentSuggestions(message: string) {
             ) : null}
           </div>
 
-          <div className="border-t px-4 py-4">
-            <div className="mb-3 flex flex-wrap gap-2">
+          <div className="border-t px-4 py-3 sm:py-4">
+            <div className="mb-2 hidden flex-wrap gap-2 sm:flex">
               {quickPrompts.map((prompt) => (
                 <button
                   key={prompt}
@@ -703,30 +703,34 @@ async function requestContentSuggestions(message: string) {
 
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-xs font-medium text-slate-500">口述也可以，先说重点我来整理</div>
-                <div className="mt-2">
+                <div className="hidden text-xs font-medium text-slate-500 sm:block">
+                  口述也可以，先说重点我来整理
+                </div>
+                <div className="mt-1 sm:mt-2">
                   <VoiceInput
                     onTranscript={(text) => {
                       appendTranscript(text);
                     }}
                   />
                 </div>
-                <div className="mt-1 text-[11px] text-slate-400">识别内容会先填进输入框，你确认后再发送</div>
+                <div className="mt-1 hidden text-[11px] text-slate-400 sm:block">
+                  识别内容会先填进输入框，你确认后再发送
+                </div>
               </div>
             </div>
 
-            <div className="mt-3 flex gap-2">
+            <div className="mt-2 flex gap-2 sm:mt-3">
               <textarea
-                className="min-h-24"
+                className="min-h-16 sm:min-h-24"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="比如：明天下午 3 点和主播对搭配，早上先对货，再出直播预告脚本"
               />
             </div>
 
-            {error ? <div className="mt-3 text-xs text-rose-700">{error}</div> : null}
+            {error ? <div className="mt-2 text-xs text-rose-700 sm:mt-3">{error}</div> : null}
 
-            <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="mt-2 flex items-center justify-between gap-3 sm:mt-3">
               <button type="button" className="text-sm muted-text" onClick={resetChat}>
                 清空对话
               </button>
