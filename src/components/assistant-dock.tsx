@@ -121,6 +121,7 @@ export function AssistantDock() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const copyTimerRef = useRef<number | null>(null);
 
@@ -492,13 +493,11 @@ async function requestContentSuggestions(message: string) {
     <div
       className={cn(
         "fixed z-50 flex flex-col gap-3",
-        open
-          ? "inset-0 items-stretch sm:inset-auto sm:bottom-5 sm:right-5 sm:items-end"
-          : "bottom-5 right-5 items-end",
+        open ? "inset-0 items-stretch" : "bottom-5 right-5 items-end",
       )}
     >
       {open ? (
-        <div className="panel flex h-screen w-screen flex-col overflow-hidden border bg-[color:var(--panel)] sm:h-[min(90vh,720px)] sm:w-[min(96vw,420px)] sm:rounded-[28px]">
+        <div className="panel flex h-screen w-screen flex-col overflow-hidden border bg-[color:var(--panel)]">
           <div className="flex items-start justify-between gap-3 border-b px-4 py-4">
             <div>
               <div className="tiny-label">AI Assistant</div>
@@ -686,62 +685,75 @@ async function requestContentSuggestions(message: string) {
             ) : null}
           </div>
 
-          <div className="border-t px-4 py-3 sm:py-4">
-            <div className="mb-2 hidden flex-wrap gap-2 sm:flex">
-              {quickPrompts.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  className="rounded-full border bg-white/80 px-3 py-1.5 text-xs font-medium"
-                  onClick={() => void sendMessage(prompt)}
-                  disabled={loading}
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
+          <div className="border-t px-4 py-3">
+            {toolsOpen ? (
+              <>
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {quickPrompts.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      className="rounded-full border bg-white/80 px-3 py-1.5 text-xs font-medium"
+                      onClick={() => void sendMessage(prompt)}
+                      disabled={loading}
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
 
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="hidden text-xs font-medium text-slate-500 sm:block">
-                  口述也可以，先说重点我来整理
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-medium text-slate-500">
+                      口述也可以，先说重点我来整理
+                    </div>
+                    <div className="mt-2">
+                      <VoiceInput
+                        onTranscript={(text) => {
+                          appendTranscript(text);
+                        }}
+                      />
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-400">
+                      识别内容会先填进输入框，你确认后再发送
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-1 sm:mt-2">
-                  <VoiceInput
-                    onTranscript={(text) => {
-                      appendTranscript(text);
-                    }}
-                  />
-                </div>
-                <div className="mt-1 hidden text-[11px] text-slate-400 sm:block">
-                  识别内容会先填进输入框，你确认后再发送
-                </div>
-              </div>
-            </div>
+              </>
+            ) : null}
 
-            <div className="mt-2 flex gap-2 sm:mt-3">
+            <div className="mt-2 flex gap-2">
               <textarea
-                className="min-h-16 sm:min-h-24"
+                className="min-h-16"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="比如：明天下午 3 点和主播对搭配，早上先对货，再出直播预告脚本"
               />
             </div>
 
-            {error ? <div className="mt-2 text-xs text-rose-700 sm:mt-3">{error}</div> : null}
+            {error ? <div className="mt-2 text-xs text-rose-700">{error}</div> : null}
 
-            <div className="mt-2 flex items-center justify-between gap-3 sm:mt-3">
-              <button type="button" className="text-sm muted-text" onClick={resetChat}>
-                清空对话
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 text-sm muted-text"
-                onClick={() => void copyConversation()}
-              >
-                <Copy className="h-3.5 w-3.5" />
-                {copied ? "已复制" : "复制对话"}
-              </button>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" className="text-sm muted-text" onClick={resetChat}>
+                  清空对话
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-sm muted-text"
+                  onClick={() => void copyConversation()}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {copied ? "已复制" : "复制对话"}
+                </button>
+                <button
+                  type="button"
+                  className="text-sm muted-text"
+                  onClick={() => setToolsOpen((current) => !current)}
+                >
+                  {toolsOpen ? "收起工具" : "展开工具"}
+                </button>
+              </div>
               <button
                 type="button"
                 className="button-primary gap-2"
