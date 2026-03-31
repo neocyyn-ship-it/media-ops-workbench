@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Check, Copy, LoaderCircle, SendHorizontal, Sparkles, X } from "lucide-react";
+import { Bot, Check, Copy, LoaderCircle, Minus, SendHorizontal, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
@@ -639,14 +639,35 @@ export function AssistantDock() {
                 先帮你看任务和排期，再把能落地的内容往站内任务里推。
               </div>
             </div>
-            <button
-              type="button"
-              className="rounded-full border bg-white/80 p-2"
+            <div
+              className="flex items-center gap-1 rounded-2xl border border-slate-200/80 bg-white/85 p-1 shadow-sm"
               onPointerDown={(event) => event.stopPropagation()}
-              onClick={() => setOpen(false)}
             >
-              <X className="h-4 w-4" />
-            </button>
+              <button
+                type="button"
+                aria-label="收起助理"
+                className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                onClick={() => setOpen(false)}
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="复制对话"
+                className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                onClick={() => void copyConversation()}
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="关闭助理"
+                className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-rose-600"
+                onClick={() => setOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           <div ref={listRef} className="flex-1 min-h-0 space-y-3 overflow-y-auto px-4 py-4">
@@ -915,15 +936,17 @@ export function AssistantDock() {
         </div>
       ) : null}
 
-      <button
-        type="button"
-        className="button-primary gap-2 px-5 py-3 shadow-[var(--shadow)]"
-        onClick={() => setOpen((current) => !current)}
-      >
-        {open ? <X className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-        {open ? "收起助理" : "AI 运营助理"}
-        <Sparkles className="h-4 w-4" />
-      </button>
+      {!open ? (
+        <button
+          type="button"
+          className="button-primary gap-2 px-5 py-3 shadow-[var(--shadow)]"
+          onClick={() => setOpen(true)}
+        >
+          <Bot className="h-4 w-4" />
+          AI 运营助理
+          <Sparkles className="h-4 w-4" />
+        </button>
+      ) : null}
     </div>
   );
 }
